@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hostage Negotiator</title>
+</head>
+<body>
+    <h1>Welcome to Hostage Negotiator</h1>
+    {% for message in messages %}
+        <p class="alert alert-{{ message.tags }}">{{ message }}</p>
+    {% endfor %}
+    {% if request.user.is_authenticated %}
+        <p>Hello, {{ request.user.username }}!</p>
+        {% if can_play %}
+            <a href="{% url 'start_game' %}">Start Game</a>
+        {% else %}
+            <p>You've already played today.</p>
+        {% endif %}
+        <a href="{% url 'logout' %}">Logout</a>
+    {% else %}
+        <p><a href="{% url 'login' %}">Login</a> | <a href="{% url 'register' %}">Register</a></p>
+        {% if can_play %}
+            <a href="{% url 'start_game' %}">Play as Guest</a>
+        {% endif %}
+    {% endif %}
+</body>
+</html>

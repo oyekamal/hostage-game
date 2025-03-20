@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stats</title>
+</head>
+<body>
+    <h1>Statistics</h1>
+    {% for message in messages %}
+        <p class="alert alert-{{ message.tags }}">{{ message }}</p>
+    {% endfor %}
+    {% if user_stats %}
+        <h2>Your Stats</h2>
+        <p>Daily Average: {{ user_stats.daily_average|default:'N/A' }}</p>
+        <p>Lifetime Average: {{ user_stats.lifetime_average|default:'N/A' }}</p>
+        <p>Current Streak: {{ user_stats.current_streak }}</p>
+        <p>Highest Streak: {{ user_stats.highest_streak }}</p>
+    {% endif %}
+    {% if latest_score %}
+        <p>Latest Score: {{ latest_score.score }} ({{ latest_score.scenario_name }})</p>
+    {% endif %}
+    <h2>Daily Top Scores</h2>
+    <ul>
+        {% for score in daily_top_scores %}
+            <li>{{ score.user.username|default:'Guest' }}: {{ score.score }}</li>
+        {% empty %}
+            <li>No scores today</li>
+        {% endfor %}
+    </ul>
+    <h2>All-Time Top Scores</h2>
+    <ul>
+        {% for score in all_time_top_scores %}
+            <li>{{ score.user.username|default:'Guest' }}: {{ score.score }}</li>
+        {% empty %}
+            <li>No all-time scores</li>
+        {% endfor %}
+    </ul>
+    <a href="{% url 'index' %}">Back to Home</a>
+</body>
+</html>

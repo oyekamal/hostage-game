@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Game</title>
+</head>
+<body>
+    <h1>Hostage Negotiation</h1>
+    {% for message in messages %}
+        <p class="alert alert-{{ message.tags }}">{{ message }}</p>
+    {% endfor %}
+    <p>Tension: {{ game_state.tension }} | Trust: {{ game_state.trust }} | Hostages: {{ game_state.hostages }}</p>
+    <h3>Messages:</h3>
+    <ul>
+        {% for sender, msg in game_state.messages %}
+            <li>{{ sender }}: {{ msg }}</li>
+        {% endfor %}
+    </ul>
+    {% if not game_state.game_over %}
+        <form method="post" action="{% url 'play' %}">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Send Response</button>
+        </form>
+    {% endif %}
+</body>
+</html>
