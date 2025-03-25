@@ -38,39 +38,6 @@ class User(AbstractUser):
             return None
         return sum(s.score for s in scores) / len(scores)
 
-
-
-class Score(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scores')
-    guest_identifier = models.CharField(max_length=64, null=True, blank=True)
-    score = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    scenario_name = models.CharField(max_length=128)
-    is_daily = models.BooleanField(default=True)
-
-    @staticmethod
-    def get_daily_top_scores(limit=10):
-        today = datetime.utcnow().date()
-        return Score.objects.filter(created_at__date=today).order_by('-score')[:limit]
-
-    @staticmethod
-    def get_all_time_top_scores(limit=10):
-        return Score.objects.filter(is_daily=False).order_by('-score')[:limit]
-
-    @staticmethod
-    def update_all_time_leaderboard():
-        today = datetime.utcnow().date()
-        daily_top_scores = Score.objects.filter(created_at__date=today).order_by('-score')[:10]
-        for score in daily_top_scores:
-            Score.objects.create(
-                user=score.user,
-                guest_identifier=score.guest_identifier,
-                score=score.score,
-                scenario_name=score.scenario_name,
-                is_daily=False,
-                created_at=score.created_at
-            )
-            
 class Scenario(models.Model):
     name = models.CharField(max_length=255)
     setting = models.CharField(max_length=255)
@@ -93,7 +60,7 @@ class Scenario(models.Model):
 
 class ScenarioAttempt(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scenario_attempts')
-    scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='attempts')  # New relationship
+    scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='attempts')
     guest_identifier = models.CharField(max_length=64, null=True, blank=True)
     scenario_name = models.CharField(max_length=128)
     start_time = models.DateTimeField(auto_now_add=True)
@@ -113,12 +80,12 @@ class ScenarioAttempt(models.Model):
         indexes = [
             models.Index(fields=['user', 'start_time']),
             models.Index(fields=['scenario_name']),
-            models.Index(fields=['scenario']),  # New index
+            models.Index(fields=['scenario']),
         ]
 
 class Score(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scores')
-    scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='scores')  # New relationship
+    scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='scores')
     guest_identifier = models.CharField(max_length=64, null=True, blank=True)
     score = models.FloatField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -127,9 +94,42 @@ class Score(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['scenario']),  # New index
+            models.Index(fields=['scenario']),
             models.Index(fields=['created_at']),
         ]
+
+    @classmethod
+    def get_daily_top_scores(cls, limit=10):
+        today = datetime.utcnow().date()
+        return cls.objects.filter(
+            created_at__date=today,
+            is_daily=True
+        ).select_related('user', 'scenario').order_by('-score')[:limit]
+
+    @classmethod
+    def get_all_time_top_scores(cls, limit=10):
+        return cls.objects.filter(
+            is_daily=False
+        ).select_related('user', 'scenario').order_by('-score')[:limit]
+
+    @classmethod
+    def update_all_time_leaderboard(cls):
+        today = datetime.utcnow().date()
+        daily_top_scores = cls.objects.filter(
+            created_at__date=today,
+            is_daily=True
+        ).order_by('-score')[:10]
+        
+        for score in daily_top_scores:
+            cls.objects.create(
+                user=score.user,
+                scenario=score.scenario,
+                guest_identifier=score.guest_identifier,
+                score=score.score,
+                scenario_name=score.scenario_name,
+                is_daily=False,
+                created_at=score.created_at
+            )
 
 class GameTurn(models.Model):
     attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='turns')
@@ -146,6 +146,7 @@ class GameTurn(models.Model):
             models.Index(fields=['attempt', 'turn_number']),
         ]
         ordering = ['turn_number']
+
 class PlayerPromise(models.Model):
     attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='promises')
     promise_text = models.TextField()
@@ -157,7 +158,6 @@ class PlayerPromise(models.Model):
         indexes = [
             models.Index(fields=['attempt']),
         ]
-
 
 class GameProgress(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='progress')

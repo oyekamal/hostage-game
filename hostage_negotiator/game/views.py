@@ -3,35 +3,45 @@ import json
 import logging
 from datetime import datetime
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
-from .models import User, GameProgress, Score
+from .models import User, GameProgress, Score, Scenario, ScenarioAttempt
 from .forms import LoginForm, RegistrationForm, ResetPasswordRequestForm, ResetPasswordForm, GameResponseForm
 from .game_logic import GameState, process_turn, calculate_game_score
 from .grok_client import get_ai_response
 from .scenario_manager import ScenarioManager
+from django.db.models import Avg
 
 logger = logging.getLogger(__name__)
 
 def index(request):
-    today = datetime.utcnow().date()
+    current_attempt = None
     can_play = True
+    
     if request.user.is_authenticated:
-        if request.user.last_played_date == today:
-            messages.info(request, 'You have already played today. Come back tomorrow!')
-            can_play = False
-    else:
-        last_played = request.session.get('last_played_date')
-        if last_played and datetime.strptime(last_played, '%Y-%m-%d').date() == today:
-            messages.info(request, 'You have already played today. Come back tomorrow or create an account!')
-            can_play = False
-            return render(request, 'game/index.html', {'can_play': can_play})
-    if not request.user.is_authenticated and can_play:
-        return redirect('start_game')
-    return render(request, 'game/index.html', {'can_play': can_play})
+        # Get any in-progress game
+        current_attempt = ScenarioAttempt.objects.filter(
+            user=request.user,
+            end_time__isnull=True
+        ).select_related('scenario').first()
+        
+        # Check if user has played today
+        today = datetime.utcnow().date()
+        played_today = ScenarioAttempt.objects.filter(
+            user=request.user,
+            start_time__date=today,
+            end_time__isnull=False
+        ).exists()
+        
+        can_play = not played_today
+    
+    return render(request, 'game/index.html', {
+        'current_attempt': current_attempt,
+        'can_play': can_play
+    })
 
 def login_view(request):
     if request.user.is_authenticated:
@@ -109,32 +119,94 @@ def reset_password(request, token):
         return redirect('login')
     return render(request, 'game/reset_password.html', {'form': form})
 
-def start_game(request):
-    today = datetime.utcnow().date()
-    if request.user.is_authenticated and request.user.last_played_date == today:
-        messages.error(request, 'You have already played today')
-        return redirect('index')
-    elif not request.user.is_authenticated:
-        last_played = request.session.get('last_played_date')
-        if last_played and datetime.strptime(last_played, '%Y-%m-%d').date() == today:
-            messages.info(request, 'You have already played today. Create an account for stats tracking!')
-            return redirect('index')
+@login_required
+def scenario_list(request):
+    scenarios = Scenario.objects.all()
+    completed_attempts = ScenarioAttempt.objects.filter(
+        user=request.user,
+        end_time__isnull=False
+    ).select_related('scenario')
     
-    daily_scenario = ScenarioManager.get_daily_scenario()
+    # Get user's current progress
+    progress, _ = GameProgress.objects.get_or_create(user=request.user)
+    
+    scenario_data = []
+    for scenario in scenarios:
+        scenario_attempts = completed_attempts.filter(scenario=scenario)
+        best_score = scenario_attempts.order_by('-final_score').first()
+        
+        scenario_data.append({
+            'scenario': scenario,
+            'attempts_count': scenario_attempts.count(),
+            'best_score': best_score.final_score if best_score else None,
+            'completed': scenario in progress.completed_scenarios.all()
+        })
+    
+    return render(request, 'game/scenario_list.html', {
+        'scenario_data': scenario_data
+    })
+
+def start_game(request, scenario_id=None):
+    if scenario_id:
+        scenario = get_object_or_404(Scenario, id=scenario_id)
+    else:
+        # Get daily scenario (most recently created one)
+        scenario = Scenario.objects.latest('created_at')
+    
+    # Check if user already played this scenario today
+    today = datetime.utcnow().date()
+    if request.user.is_authenticated:
+        existing_attempt = ScenarioAttempt.objects.filter(
+            user=request.user,
+            scenario=scenario,
+            start_time__date=today,
+            end_time__isnull=False
+        ).exists()
+        
+        if existing_attempt:
+            messages.error(request, 'You have already played this scenario today')
+            return redirect('scenario_list')
+    
+    # Create game state
     game_state = GameState(
-        tension=5, trust=3, hostages=daily_scenario.hostages, scenario=daily_scenario
+        tension=5,
+        trust=3,
+        hostages=scenario.hostages,
+        scenario=scenario
     )
-    game_state.messages.append(("suspect", daily_scenario.opening_dialogue))
+    game_state.messages.append(("suspect", scenario.opening_dialogue))
+    
+    # Create scenario attempt
+    attempt = ScenarioAttempt.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        scenario=scenario,
+        scenario_name=scenario.name,
+        initial_tension=game_state.tension,
+        initial_trust=game_state.trust,
+        initial_hostages=game_state.hostages
+    )
+    
+    # Store attempt ID in session
+    request.session['current_attempt_id'] = attempt.id
     request.session['game_state'] = game_state.to_dict()
-    request.session['last_played_date'] = today.strftime('%Y-%m-%d')  # Track for guests
+    
     return redirect('game')
 
 def game(request):
-    if 'game_state' not in request.session:
+    attempt_id = request.session.get('current_attempt_id')
+    if not attempt_id:
         return redirect('index')
+    
+    attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
     game_state = GameState.from_dict(request.session['game_state'])
     form = GameResponseForm()
-    return render(request, 'game/game.html', {'game_state': game_state, 'form': form})
+    
+    return render(request, 'game/game.html', {
+        'game_state': game_state,
+        'form': form,
+        'attempt': attempt
+    })
+
 def play(request):
     if 'game_state' not in request.session:
         messages.error(request, 'Game session expired. Please start a new game.')
@@ -189,15 +261,19 @@ def play(request):
 def stats(request):
     user_stats = None
     if request.user.is_authenticated:
+        attempts = ScenarioAttempt.objects.filter(user=request.user)
         user_stats = {
-            'daily_average': request.user.get_daily_average(),
-            'lifetime_average': request.user.get_lifetime_average(),
+            'total_attempts': attempts.count(),
+            'successful_attempts': attempts.filter(success=True).count(),
+            'average_score': attempts.filter(final_score__isnull=False).aggregate(Avg('final_score'))['final_score__avg'],
             'current_streak': request.user.current_streak,
             'highest_streak': request.user.highest_streak
         }
+    
     latest_score = request.session.get('latest_score')
     daily_top_scores = Score.get_daily_top_scores()
     all_time_top_scores = Score.get_all_time_top_scores()
+    
     return render(request, 'game/stats.html', {
         'user_stats': user_stats,
         'latest_score': latest_score,
@@ -218,3 +294,19 @@ def save_game_score(request, user_id, game_state):
         request.session['latest_score'] = {'score': score, 'scenario_name': game_state.scenario.name}
         return new_score
     return None
+
+@login_required
+def game_history(request):
+    attempts = ScenarioAttempt.objects.filter(
+        user=request.user
+    ).select_related('scenario').order_by('-start_time')
+    
+    return render(request, 'game/history.html', {
+        'attempts': attempts
+    })
+
+@login_required
+def resume_game(request, attempt_id):
+    attempt = get_object_or_404(ScenarioAttempt, id=attempt_id, user=request.user, end_time__isnull=True)
+    request.session['current_attempt_id'] = attempt.id
+    return redirect('game')

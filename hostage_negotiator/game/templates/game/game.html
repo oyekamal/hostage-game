@@ -1,26 +1,69 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Game</title>
-</head>
-<body>
+{% extends 'base.html' %}
+
+{% block content %}
     <h1>Hostage Negotiation</h1>
-    {% for message in messages %}
-        <p class="alert alert-{{ message.tags }}">{{ message }}</p>
-    {% endfor %}
-    <p>Tension: {{ game_state.tension }} | Trust: {{ game_state.trust }} | Hostages: {{ game_state.hostages }}</p>
-    <h3>Messages:</h3>
-    <ul>
-        {% for sender, msg in game_state.messages %}
-            <li>{{ sender }}: {{ msg }}</li>
-        {% endfor %}
-    </ul>
+    
+    <div class="game-status">
+        <p>Tension: {{ game_state.tension }} | Trust: {{ game_state.trust }} | Hostages: {{ game_state.hostages }}</p>
+    </div>
+
+    <div class="message-history">
+        <h3>Messages:</h3>
+        <ul>
+            {% for sender, msg in game_state.messages %}
+                <li class="message {% if sender == 'suspect' %}suspect{% else %}negotiator{% endif %}">
+                    <strong>{{ sender }}:</strong> {{ msg }}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
     {% if not game_state.game_over %}
-        <form method="post" action="{% url 'play' %}">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit">Send Response</button>
-        </form>
+        <div class="response-form">
+            <form method="post" action="{% url 'play' %}">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <button type="submit" class="btn btn-primary">Send Response</button>
+            </form>
+        </div>
     {% endif %}
-</body>
-</html>
+
+    <style>
+        .game-status {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .message-history {
+            margin: 20px 0;
+        }
+        
+        .message-history ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .message {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        
+        .message.suspect {
+            background-color: #f8d7da;
+        }
+        
+        .message.negotiator {
+            background-color: #d4edda;
+        }
+        
+        .response-form {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+    </style>
+{% endblock %}

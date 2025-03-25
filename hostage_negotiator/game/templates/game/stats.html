@@ -1,39 +1,117 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Stats</title>
-</head>
-<body>
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="stats-page">
     <h1>Statistics</h1>
-    {% for message in messages %}
-        <p class="alert alert-{{ message.tags }}">{{ message }}</p>
-    {% endfor %}
-    {% if user_stats %}
-        <h2>Your Stats</h2>
-        <p>Daily Average: {{ user_stats.daily_average|default:'N/A' }}</p>
-        <p>Lifetime Average: {{ user_stats.lifetime_average|default:'N/A' }}</p>
-        <p>Current Streak: {{ user_stats.current_streak }}</p>
-        <p>Highest Streak: {{ user_stats.highest_streak }}</p>
+
+    {% if user.is_authenticated %}
+        <div class="stats-section">
+            <h2>Your Stats</h2>
+            <div class="stats-container">
+                <div class="stat-item">
+                    <h3>Total Games</h3>
+                    <p>{{ user_stats.total_attempts|default:"0" }}</p>
+                </div>
+                <div class="stat-item">
+                    <h3>Successful Negotiations</h3>
+                    <p>{{ user_stats.successful_attempts|default:"0" }}</p>
+                </div>
+                <div class="stat-item">
+                    <h3>Average Score</h3>
+                    <p>{{ user_stats.average_score|default:"0"|floatformat:1 }}</p>
+                </div>
+                <div class="stat-item">
+                    <h3>Current Streak</h3>
+                    <p>{{ user_stats.current_streak|default:"0" }}</p>
+                </div>
+                <div class="stat-item">
+                    <h3>Highest Streak</h3>
+                    <p>{{ user_stats.highest_streak|default:"0" }}</p>
+                </div>
+            </div>
+        </div>
     {% endif %}
+
     {% if latest_score %}
-        <p>Latest Score: {{ latest_score.score }} ({{ latest_score.scenario_name }})</p>
+        <div class="stats-section">
+            <h2>Latest Game</h2>
+            <div class="stat-item">
+                <p>Scenario: {{ latest_score.scenario_name }}</p>
+                <p>Score: {{ latest_score.score }}</p>
+            </div>
+        </div>
     {% endif %}
-    <h2>Daily Top Scores</h2>
-    <ul>
-        {% for score in daily_top_scores %}
-            <li>{{ score.user.username|default:'Guest' }}: {{ score.score }}</li>
-        {% empty %}
-            <li>No scores today</li>
-        {% endfor %}
-    </ul>
-    <h2>All-Time Top Scores</h2>
-    <ul>
-        {% for score in all_time_top_scores %}
-            <li>{{ score.user.username|default:'Guest' }}: {{ score.score }}</li>
-        {% empty %}
-            <li>No all-time scores</li>
-        {% endfor %}
-    </ul>
-    <a href="{% url 'index' %}">Back to Home</a>
-</body>
-</html>
+
+    <div class="stats-section">
+        <h2>Daily Top Scores</h2>
+        <div class="leaderboard">
+            {% for score in daily_top_scores %}
+                <div class="leaderboard-item">
+                    <span class="rank">#{{ forloop.counter }}</span>
+                    <span class="player">{{ score.user.username|default:"Guest" }}</span>
+                    <span class="scenario">{{ score.scenario_name }}</span>
+                    <span class="score">{{ score.score|floatformat:1 }}</span>
+                </div>
+            {% empty %}
+                <p>No scores recorded today</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="stats-section">
+        <h2>All-Time Top Scores</h2>
+        <div class="leaderboard">
+            {% for score in all_time_top_scores %}
+                <div class="leaderboard-item">
+                    <span class="rank">#{{ forloop.counter }}</span>
+                    <span class="player">{{ score.user.username|default:"Guest" }}</span>
+                    <span class="scenario">{{ score.scenario_name }}</span>
+                    <span class="score">{{ score.score|floatformat:1 }}</span>
+                </div>
+            {% empty %}
+                <p>No all-time scores recorded</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .stats-page {
+        max-width: 1000px;
+        margin: 0 auto;
+    }
+    
+    .stats-section {
+        margin: 30px 0;
+    }
+    
+    .leaderboard {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .leaderboard-item {
+        display: grid;
+        grid-template-columns: 50px 1fr 1fr 100px;
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .leaderboard-item:last-child {
+        border-bottom: none;
+    }
+    
+    .rank {
+        font-weight: bold;
+        color: #666;
+    }
+    
+    .score {
+        font-weight: bold;
+        color: #007bff;
+        text-align: right;
+    }
+</style>
+{% endblock %}

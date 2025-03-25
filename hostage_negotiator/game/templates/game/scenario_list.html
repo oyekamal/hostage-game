@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Available Scenarios</h1>
+
+{% for data in scenario_data %}
+    <div class="scenario-card {% if data.completed %}completed{% endif %}">
+        <h2>{{ data.scenario.name }}</h2>
+        <p>Setting: {{ data.scenario.setting }}</p>
+        <p>Hostages: {{ data.scenario.hostages }}</p>
+        {% if data.attempts_count > 0 %}
+            <p>Attempts: {{ data.attempts_count }}</p>
+            {% if data.best_score %}
+                <p>Best Score: {{ data.best_score }}</p>
+            {% endif %}
+        {% endif %}
+        <a href="{% url 'start_game' data.scenario.id %}" class="btn btn-primary">Play Scenario</a>
+    </div>
+{% endfor %}
+{% endblock %}
