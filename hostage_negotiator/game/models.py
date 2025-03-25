@@ -38,13 +38,7 @@ class User(AbstractUser):
             return None
         return sum(s.score for s in scores) / len(scores)
 
-class GameProgress(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='game_progress')
-    played_date = models.DateTimeField(auto_now_add=True)
-    success = models.BooleanField(default=False)
 
-    class Meta:
-        indexes = [models.Index(fields=['user', 'played_date'])]
 
 class Score(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scores')
@@ -76,3 +70,108 @@ class Score(models.Model):
                 is_daily=False,
                 created_at=score.created_at
             )
+            
+class Scenario(models.Model):
+    name = models.CharField(max_length=255)
+    setting = models.CharField(max_length=255)
+    suspect = models.CharField(max_length=255)
+    initial_mood = models.IntegerField()
+    hostages = models.IntegerField()
+    opening_dialogue = models.TextField()
+    demand = models.CharField(max_length=255)
+    goal = models.CharField(max_length=255)
+    suspect_type = models.CharField(max_length=20, default='pragmatic')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Scenario'
+        verbose_name_plural = 'Scenarios'
+
+    def __str__(self):
+        return self.name
+
+class ScenarioAttempt(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scenario_attempts')
+    scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='attempts')  # New relationship
+    guest_identifier = models.CharField(max_length=64, null=True, blank=True)
+    scenario_name = models.CharField(max_length=128)
+    start_time = models.DateTimeField(auto_now_add=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    initial_tension = models.IntegerField()
+    initial_trust = models.IntegerField()
+    final_tension = models.IntegerField(null=True)
+    final_trust = models.IntegerField(null=True)
+    initial_hostages = models.IntegerField()
+    final_hostages = models.IntegerField(null=True)
+    success = models.BooleanField(default=False)
+    surrender_offered = models.BooleanField(default=False)
+    total_turns = models.IntegerField(default=0)
+    final_score = models.FloatField(null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'start_time']),
+            models.Index(fields=['scenario_name']),
+            models.Index(fields=['scenario']),  # New index
+        ]
+
+class Score(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scores')
+    scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='scores')  # New relationship
+    guest_identifier = models.CharField(max_length=64, null=True, blank=True)
+    score = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    scenario_name = models.CharField(max_length=128)
+    is_daily = models.BooleanField(default=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['scenario']),  # New index
+            models.Index(fields=['created_at']),
+        ]
+
+class GameTurn(models.Model):
+    attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='turns')
+    turn_number = models.IntegerField()
+    player_input = models.TextField()
+    game_response = models.TextField()
+    tension_change = models.IntegerField()
+    trust_change = models.IntegerField()
+    hostages_released = models.IntegerField(default=0)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['attempt', 'turn_number']),
+        ]
+        ordering = ['turn_number']
+class PlayerPromise(models.Model):
+    attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='promises')
+    promise_text = models.TextField()
+    turn_made = models.IntegerField()
+    was_kept = models.BooleanField(default=False)
+    turn_resolved = models.IntegerField(null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['attempt']),
+        ]
+
+
+class GameProgress(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='progress')
+    current_scenario = models.ForeignKey(Scenario, on_delete=models.SET_NULL, null=True, blank=True, related_name='current_players')
+    completed_scenarios = models.ManyToManyField(Scenario, related_name='completed_by', blank=True)
+    total_score = models.IntegerField(default=0)
+    highest_scenario_score = models.IntegerField(default=0)
+    last_played_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Game Progress"
+        indexes = [
+            models.Index(fields=['user', 'last_played_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username}'s Progress"
