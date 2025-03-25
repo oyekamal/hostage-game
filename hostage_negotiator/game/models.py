@@ -166,6 +166,8 @@ class GameProgress(models.Model):
     total_score = models.IntegerField(default=0)
     highest_scenario_score = models.IntegerField(default=0)
     last_played_at = models.DateTimeField(auto_now=True)
+    success_count = models.IntegerField(default=0)  # Add this field to track successful games
+    total_games = models.IntegerField(default=0)    # Add this field to track total games
 
     class Meta:
         verbose_name_plural = "Game Progress"

@@ -168,14 +168,17 @@ class GameState:
             self.messages.append(("suspect", response))
             self.turn += 1
 
+            # Check tension level first
             if self.tension >= 9:
                 self.messages.append(("system", "Warning: Suspect is becoming extremely agitated! One more mistake could be catastrophic."))
 
+            # Immediately end game if tension reaches max
             if self.tension >= 10:
                 self.game_over = True
                 self.success = False
                 self.hostages -= 1
                 self.messages.append(("system", "The situation has escalated beyond control. A hostage has been harmed."))
+                return False  # Return False to indicate game should end
             elif self.turn >= 10:
                 # Win only if tension is very low and trust is high
                 if self.tension <= 2 and self.trust >= 7:
@@ -186,6 +189,7 @@ class GameState:
                     self.game_over = True
                     self.success = False
                     self.messages.append(("system", "Time has run out. Negotiation failed."))
+                return False  # Return False to indicate game should end
         except Exception as e:
             logging.error(f"Error processing AI response: {str(e)}")
             self.messages.append(("system", "There was an issue with the negotiation. Please try again."))
@@ -199,21 +203,6 @@ class GameState:
         return self.success
 
     def to_dict(self):
-        """Convert GameState to dictionary for session storage"""
-        scenario_dict = None
-        if self.scenario:
-            scenario_dict = {
-                'name': self.scenario.name,
-                'setting': self.scenario.setting,
-                'suspect': self.scenario.suspect,
-                'initial_mood': self.scenario.initial_mood,
-                'hostages': self.scenario.hostages,
-                'opening_dialogue': self.scenario.opening_dialogue,
-                'demand': self.scenario.demand,
-                'goal': self.scenario.goal,
-                'suspect_type': self.scenario.suspect_type or 'pragmatic'  # Ensure default value
-            }
-
         return {
             'turn': self.turn,
             'tension': self.tension,
@@ -222,7 +211,7 @@ class GameState:
             'messages': self.messages,
             'game_over': self.game_over,
             'success': self.success,
-            'scenario': scenario_dict,
+            'scenario_id': self.scenario.id if self.scenario else None,
             'good_choice_streak': self.good_choice_streak,
             'promises_kept': self.promises_kept,
             'rapport': self.rapport,
@@ -236,35 +225,27 @@ class GameState:
 
     @classmethod
     def from_dict(cls, data):
-        """Create GameState from dictionary, handling missing fields gracefully"""
-        if not data:
-            return None
-
-        # Extract scenario data safely
-        scenario_data = data.pop('scenario', None)
-
-        # Create instance with remaining data
-        instance = cls(**{k: v for k, v in data.items() if hasattr(cls, k)})
-
-        # Handle scenario separately to ensure proper initialization
-        if scenario_data:
-            from .scenario_manager import Scenario
-            instance.scenario = Scenario(
-                name=scenario_data.get('name', 'Default Scenario'),
-                setting=scenario_data.get('setting', 'Unknown'),
-                suspect=scenario_data.get('suspect', 'Unknown'),
-                initial_mood=scenario_data.get('initial_mood', 7),
-                hostages=scenario_data.get('hostages', 5),
-                opening_dialogue=scenario_data.get('opening_dialogue', ''),
-                demand=scenario_data.get('demand', ''),
-                goal=scenario_data.get('goal', 'Negotiate for peaceful resolution'),
-                suspect_type=scenario_data.get('suspect_type', 'pragmatic')
-            )
-        else:
-            # Provide a default scenario if none exists
-            from .scenario_manager import ScenarioManager
-            instance.scenario = ScenarioManager.get_daily_scenario()
-
+        from .models import Scenario
+        instance = cls(
+            turn=data['turn'],
+            tension=data['tension'],
+            trust=data['trust'],
+            hostages=data['hostages']
+        )
+        instance.messages = data['messages']
+        instance.game_over = data['game_over']
+        instance.success = data['success']
+        if data.get('scenario_id'):
+            instance.scenario = Scenario.objects.get(id=data['scenario_id'])
+        instance.good_choice_streak = data.get('good_choice_streak', 0)
+        instance.promises_kept = data.get('promises_kept', [])
+        instance.rapport = data.get('rapport', 0)
+        instance.hostages_released = data.get('hostages_released', 0)
+        instance.surrender_offered = data.get('surrender_offered', False)
+        instance.poor_choices = data.get('poor_choices', 0)
+        instance.similar_inputs_count = data.get('similar_inputs_count', 0)
+        instance.last_input_type = data.get('last_input_type')
+        instance.emotional_appeals_count = data.get('emotional_appeals_count', 0)
         return instance
 
 def calculate_game_score(game_state):
