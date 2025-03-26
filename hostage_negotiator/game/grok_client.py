@@ -6,8 +6,7 @@ import logging
 from functools import lru_cache
 import hashlib
 
-# API_KEY = os.getenv("GROK_API_KEY")
-API_KEY = "xai-3NPFA5KnauyAVbsamCB8yAeQcSTT0JC2qpSalfcrhtRMwNO904TXR438NJQhGzEQ8fnedhxjEoiBHscZ"
+API_KEY = os.getenv("GROK_API_KEY")
 
 logger = logging.getLogger(__name__)
 
