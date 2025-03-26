@@ -149,20 +149,19 @@ class ScenarioAttempt(models.Model):
         return game_state
 
     def update_from_game_state(self, game_state):
-        """Update attempt data from GameState object"""
+        """Update attempt with current game state"""
         self.current_tension = game_state.tension
         self.current_trust = game_state.trust
         self.current_hostages = game_state.hostages
-        self.current_turn = game_state.turn
+        self.messages = game_state.messages
+        self.hostages_released = game_state.hostages_released
+        self.turn = game_state.turn
         self.total_turns = game_state.turn
         self.game_over = game_state.game_over
         self.success = game_state.success
-        self.messages = game_state.messages
         self.good_choice_streak = game_state.good_choice_streak
         self.promises_kept = game_state.promises_kept
         self.rapport = game_state.rapport
-        self.hostages_released = game_state.hostages_released
-        self.surrender_offered = game_state.surrender_offered
         self.poor_choices = game_state.poor_choices
         self.similar_inputs_count = game_state.similar_inputs_count
         self.last_input_type = game_state.last_input_type

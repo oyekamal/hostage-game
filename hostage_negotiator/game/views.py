@@ -203,11 +203,25 @@ def game(request):
     game_state = attempt.get_game_state()
     form = GameResponseForm()
     
-    return render(request, 'game/game.html', {
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_messages = []
+    for msg in game_state.messages:
+        msg_tuple = (msg[0], msg[1])
+        if msg_tuple not in seen:
+            seen.add(msg_tuple)
+            unique_messages.append(msg)
+    
+    game_state.messages = unique_messages
+    
+    context = {
         'game_state': game_state,
         'form': form,
-        'attempt': attempt
-    })
+        'hostages_remaining': game_state.hostages - game_state.hostages_released,
+        'hostages_released': game_state.hostages_released
+    }
+    
+    return render(request, 'game/game.html', context)
 
 @login_required
 def play(request):
@@ -224,6 +238,10 @@ def play(request):
     if request.method == 'POST' and form.is_valid():
         choice = form.cleaned_data['choice']
         
+        # Check if this exact message was just sent to prevent duplicates
+        if not game_state.messages or game_state.messages[-1] != ("player", choice):
+            game_state.messages.append(("player", choice))
+        
         success, message = process_turn(game_state, choice)
         if not success:
             messages.error(request, message)
@@ -233,22 +251,11 @@ def play(request):
         game_state.tension = ai_response['tension_level']
         game_state.trust = ai_response['trust_level']
         
-        # Check for game-ending conditions
-        if game_state.tension >= 10:
-            game_state.game_over = True
-            game_state.success = False
-            game_state.hostages -= 1
-            game_state.messages.append(("system", "The situation has escalated beyond control. A hostage has been harmed."))
-            
-            # Update attempt with final state
-            attempt.end_time = datetime.utcnow()
-            attempt.success = False
-            attempt.final_score = calculate_game_score(game_state)
-            attempt.update_from_game_state(game_state)
-            attempt.save()
-            
-            messages.error(request, "Game Over - The situation escalated beyond control.")
-            return redirect('stats')  # or wherever you want to redirect after game over
+        # Add AI's response to game state (check for duplicates)
+        if 'suspect_response' in ai_response:
+            suspect_response = ai_response['suspect_response']
+            if not game_state.messages or game_state.messages[-1] != ("suspect", suspect_response):
+                game_state.messages.append(("suspect", suspect_response))
         
         # Update attempt with current game state
         attempt.update_from_game_state(game_state)

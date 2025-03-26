@@ -1,21 +1,44 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <h1>Hostage Negotiation</h1>
+<!-- Remove any content before the game-container div -->
+<div class="game-container">
+    <h1 class="game-title">Hostage Negotiation</h1>
     
     <div class="game-status">
-        <p>Tension: {{ game_state.tension }} | Trust: {{ game_state.trust }} | Hostages: {{ game_state.hostages }}</p>
+        <div class="status-item">
+            <span class="status-label">Tension:</span>
+            <span class="status-value">{{ game_state.tension }}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Trust:</span>
+            <span class="status-value">{{ game_state.trust }}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Hostages:</span>
+            <span class="status-value">{{ hostages_remaining }} ({{ hostages_released }} released)</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Turn:</span>
+            <span class="status-value">{{ game_state.turn }}/10</span>
+        </div>
     </div>
 
     <div class="message-history">
-        <h3>Messages:</h3>
-        <ul>
-            {% for sender, msg in game_state.messages %}
-                <li class="message {% if sender == 'suspect' %}suspect{% else %}negotiator{% endif %}">
-                    <strong>{{ sender }}:</strong> {{ msg }}
-                </li>
+        <h3>Conversation History</h3>
+        <div class="message-container">
+            {% for message in game_state.messages %}
+                <div class="message {{ message.0 }}">
+                    <span class="message-sender">
+                        {% if message.0 == 'system' %}System
+                        {% elif message.0 == 'suspect' %}Suspect
+                        {% elif message.0 == 'player' %}You
+                        {% endif %}
+                    </span>
+                    <span class="message-content">{{ message.1 }}</span>
+                </div>
             {% endfor %}
-        </ul>
+        </div>
     </div>
 
     {% if not game_state.game_over %}
@@ -27,43 +50,5 @@
             </form>
         </div>
     {% endif %}
-
-    <style>
-        .game-status {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        
-        .message-history {
-            margin: 20px 0;
-        }
-        
-        .message-history ul {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .message {
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 4px;
-        }
-        
-        .message.suspect {
-            background-color: #f8d7da;
-        }
-        
-        .message.negotiator {
-            background-color: #d4edda;
-        }
-        
-        .response-form {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-        }
-    </style>
+</div>
 {% endblock %}

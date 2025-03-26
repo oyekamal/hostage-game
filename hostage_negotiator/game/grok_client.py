@@ -272,15 +272,19 @@ def process_api_response(response, game_state):
         # Calculate remaining hostages
         remaining_hostages = game_state.hostages - game_state.hostages_released
         
+        # Add the AI response to messages
+        game_state.messages.append(("suspect", ai_message))
+        
         return {
             "tension_level": game_state.tension,
             "trust_level": game_state.trust,
             "suspect_response": ai_message,
             "counter_offer": None,
             "daily_hint": get_contextual_hint(game_state),
-            "hostage_count": remaining_hostages,  # Use the calculated remaining hostages
+            "hostage_count": remaining_hostages,
             "turn_count": game_state.turn,
-            "hostages_released": game_state.hostages_released  # Add this to track released hostages
+            "hostages_released": game_state.hostages_released,
+            "messages": game_state.messages  # Include updated messages
         }
     except Exception as e:
         logger.error(f"Error processing API response: {e}")
