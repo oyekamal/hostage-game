@@ -150,7 +150,6 @@ def start_game(request, scenario_id=None):
     if scenario_id:
         scenario = get_object_or_404(Scenario, id=scenario_id)
     else:
-        # Get daily scenario (most recently created one)
         scenario = Scenario.objects.latest('created_at')
     
     # Check if user already played this scenario today
@@ -183,12 +182,15 @@ def start_game(request, scenario_id=None):
         scenario_name=scenario.name,
         initial_tension=game_state.tension,
         initial_trust=game_state.trust,
-        initial_hostages=game_state.hostages
+        initial_hostages=game_state.hostages,
+        current_tension=game_state.tension,
+        current_trust=game_state.trust,
+        current_hostages=game_state.hostages,
+        messages=game_state.messages
     )
     
     # Store attempt ID in session
     request.session['current_attempt_id'] = attempt.id
-    request.session['game_state'] = game_state.to_dict()
     
     return redirect('game')
 
@@ -198,7 +200,7 @@ def game(request):
         return redirect('index')
     
     attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
-    game_state = GameState.from_dict(request.session['game_state'])
+    game_state = attempt.get_game_state()
     form = GameResponseForm()
     
     return render(request, 'game/game.html', {
@@ -209,49 +211,43 @@ def game(request):
 
 @login_required
 def play(request):
-    if 'game_state' not in request.session:
-        messages.error(request, 'Game session expired. Please start a new game.')
-        return redirect('index')
-    
     attempt_id = request.session.get('current_attempt_id')
     if not attempt_id:
         messages.error(request, 'No active game found.')
         return redirect('index')
         
     attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
+    game_state = attempt.get_game_state()
+    
+    if game_state.game_over:
+        messages.error(request, 'This game has already ended.')
+        return redirect('index')
+    
     form = GameResponseForm(request.POST or None)
     
     if request.method == 'POST' and form.is_valid():
-        game_state = GameState.from_dict(request.session['game_state'])
         choice = form.cleaned_data['choice']
         
         if choice.lower() == 'accept surrender' and game_state.surrender_offered:
             game_state.success = True
             game_state.game_over = True
-            
-            # Update the attempt record
-            attempt.end_time = datetime.utcnow()
-            attempt.final_tension = game_state.tension
-            attempt.final_trust = game_state.trust
-            attempt.final_hostages = game_state.hostages
-            attempt.success = True
-            attempt.save()
+            attempt.update_from_game_state(game_state)
             
             if request.user.is_authenticated:
                 score = save_game_score(request, request.user.id, game_state)
                 request.user.last_played_date = datetime.utcnow().date()
                 request.user.current_streak += 1
                 request.user.highest_streak = max(request.user.current_streak, request.user.highest_streak)
+                request.user.save()
                 
-                # Update GameProgress
                 progress, created = GameProgress.objects.get_or_create(user=request.user)
                 progress.total_games += 1
                 if game_state.is_success():
                     progress.success_count += 1
                 progress.save()
                 
-                request.user.save()
                 return redirect('stats')
+            
             messages.success(request, 'Great job! Create an account to track your progress!')
             return redirect('stats')
 
@@ -264,9 +260,9 @@ def play(request):
         game_state.tension = ai_response['tension_level']
         game_state.trust = ai_response['trust_level']
         
-        # Process AI response and check if game should end
         if not game_state.process_ai_response(ai_response['suspect_response']):
-            # Game has ended due to tension or other conditions
+            attempt.update_from_game_state(game_state)
+            
             if request.user.is_authenticated:
                 score = save_game_score(request, request.user.id, game_state)
                 request.user.last_played_date = datetime.utcnow().date()
@@ -275,29 +271,23 @@ def play(request):
                     request.user.highest_streak = max(request.user.current_streak, request.user.highest_streak)
                 else:
                     request.user.current_streak = 0
+                request.user.save()
                 
-                # Update GameProgress
                 progress, created = GameProgress.objects.get_or_create(user=request.user)
                 progress.total_games += 1
                 if game_state.is_success():
                     progress.success_count += 1
                 progress.save()
-                
-                request.user.save()
             
-            # Update attempt record
-            attempt.end_time = datetime.utcnow()
-            attempt.final_tension = game_state.tension
-            attempt.final_trust = game_state.trust
-            attempt.final_hostages = game_state.hostages
-            attempt.success = game_state.is_success()
-            attempt.save()
-            
-            request.session['game_state'] = game_state.to_dict()
             return redirect('stats')
 
-        request.session['game_state'] = game_state.to_dict()
-        return render(request, 'game/game.html', {'game_state': game_state, 'form': form})
+        attempt.update_from_game_state(game_state)
+        return render(request, 'game/game.html', {
+            'game_state': game_state,
+            'form': form,
+            'attempt': attempt
+        })
+    
     return redirect('game')
 
 def stats(request):
