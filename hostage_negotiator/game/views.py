@@ -219,38 +219,11 @@ def play(request):
     attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
     game_state = attempt.get_game_state()
     
-    if game_state.game_over:
-        messages.error(request, 'This game has already ended.')
-        return redirect('index')
-    
     form = GameResponseForm(request.POST or None)
     
     if request.method == 'POST' and form.is_valid():
         choice = form.cleaned_data['choice']
         
-        if choice.lower() == 'accept surrender' and game_state.surrender_offered:
-            game_state.success = True
-            game_state.game_over = True
-            attempt.update_from_game_state(game_state)
-            
-            if request.user.is_authenticated:
-                score = save_game_score(request, request.user.id, game_state)
-                request.user.last_played_date = datetime.utcnow().date()
-                request.user.current_streak += 1
-                request.user.highest_streak = max(request.user.current_streak, request.user.highest_streak)
-                request.user.save()
-                
-                progress, created = GameProgress.objects.get_or_create(user=request.user)
-                progress.total_games += 1
-                if game_state.is_success():
-                    progress.success_count += 1
-                progress.save()
-                
-                return redirect('stats')
-            
-            messages.success(request, 'Great job! Create an account to track your progress!')
-            return redirect('stats')
-
         success, message = process_turn(game_state, choice)
         if not success:
             messages.error(request, message)
@@ -260,33 +233,28 @@ def play(request):
         game_state.tension = ai_response['tension_level']
         game_state.trust = ai_response['trust_level']
         
-        if not game_state.process_ai_response(ai_response['suspect_response']):
+        # Check for game-ending conditions
+        if game_state.tension >= 10:
+            game_state.game_over = True
+            game_state.success = False
+            game_state.hostages -= 1
+            game_state.messages.append(("system", "The situation has escalated beyond control. A hostage has been harmed."))
+            
+            # Update attempt with final state
+            attempt.end_time = datetime.utcnow()
+            attempt.success = False
+            attempt.final_score = calculate_game_score(game_state)
             attempt.update_from_game_state(game_state)
+            attempt.save()
             
-            if request.user.is_authenticated:
-                score = save_game_score(request, request.user.id, game_state)
-                request.user.last_played_date = datetime.utcnow().date()
-                if game_state.is_success():
-                    request.user.current_streak += 1
-                    request.user.highest_streak = max(request.user.current_streak, request.user.highest_streak)
-                else:
-                    request.user.current_streak = 0
-                request.user.save()
-                
-                progress, created = GameProgress.objects.get_or_create(user=request.user)
-                progress.total_games += 1
-                if game_state.is_success():
-                    progress.success_count += 1
-                progress.save()
-            
-            return redirect('stats')
-
+            messages.error(request, "Game Over - The situation escalated beyond control.")
+            return redirect('stats')  # or wherever you want to redirect after game over
+        
+        # Update attempt with current game state
         attempt.update_from_game_state(game_state)
-        return render(request, 'game/game.html', {
-            'game_state': game_state,
-            'form': form,
-            'attempt': attempt
-        })
+        attempt.save()
+        
+        return redirect('game')
     
     return redirect('game')
 
