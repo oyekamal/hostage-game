@@ -27,11 +27,11 @@ class ScenarioAdmin(admin.ModelAdmin):
 class ScenarioAttemptAdmin(admin.ModelAdmin):
     list_display = ('scenario', 'user', 'start_time', 'success', 'total_turns', 'final_score')
     list_filter = ('scenario', 'success', 'start_time')
-    search_fields = ('user__username', 'guest_identifier', 'scenario__name')
+    search_fields = ('user__username', 'scenario__name')
     readonly_fields = ('start_time', 'end_time')
     fieldsets = (
         ('Attempt Information', {
-            'fields': ('scenario', 'user', 'guest_identifier', 'start_time', 'end_time')
+            'fields': ('scenario', 'user', 'start_time', 'end_time')
         }),
         ('Game State', {
             'fields': ('initial_tension', 'final_tension', 'initial_trust', 'final_trust', 
