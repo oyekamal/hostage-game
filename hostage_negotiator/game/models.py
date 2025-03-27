@@ -155,7 +155,7 @@ class ScenarioAttempt(models.Model):
         self.current_hostages = game_state.hostages
         self.messages = game_state.messages
         self.hostages_released = game_state.hostages_released
-        self.turn = game_state.turn
+        self.current_turn = game_state.turn  # Make sure this line exists
         self.total_turns = game_state.turn
         self.game_over = game_state.game_over
         self.success = game_state.success

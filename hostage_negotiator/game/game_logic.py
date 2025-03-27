@@ -353,6 +353,16 @@ def calculate_game_score(game_state):
 def process_turn(game_state, choice):
     """Process a turn based on player's choice"""
     logging.debug(f"Processing turn with choice: {choice}")
+    
+    # Check turn limit
+    if game_state.turn >= 10:
+        game_state.game_over = True
+        if game_state.tension <= 2 and game_state.trust >= 7:
+            game_state.success = True
+            return False, "Negotiation successful!"
+        else:
+            game_state.success = False
+            return False, "Time has run out. Negotiation failed."
 
     # Process the turn
     game_state.messages.append(("player", choice))

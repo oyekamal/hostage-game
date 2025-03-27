@@ -8,7 +8,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
-from .models import User, GameProgress, Score, Scenario, ScenarioAttempt
+from .models import User, GameProgress, Score, Scenario, ScenarioAttempt, GameTurn
 from .forms import LoginForm, RegistrationForm, ResetPasswordRequestForm, ResetPasswordForm, GameResponseForm
 from .game_logic import GameState, process_turn, calculate_game_score
 from .grok_client import get_ai_response
@@ -233,14 +233,53 @@ def play(request):
     attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
     game_state = attempt.get_game_state()
     
+    # Check if game should be ended
+    if game_state.turn >= 10:
+        game_state.game_over = True
+        # Determine success based on final state
+        if game_state.tension <= 2 and game_state.trust >= 7:
+            game_state.success = True
+            game_state.messages.append(("system", "The suspect's resolve has completely broken. Negotiation successful!"))
+        else:
+            game_state.success = False
+            game_state.messages.append(("system", "Time has run out. Negotiation failed."))
+        
+        # Update attempt with final state
+        attempt.update_from_game_state(game_state)
+        attempt.end_time = datetime.utcnow()
+        attempt.save()
+        
+        # Calculate and save score
+        if request.user.is_authenticated:
+            save_game_score(request, request.user.id, game_state)
+        
+        return redirect('game')
+    
     form = GameResponseForm(request.POST or None)
     
     if request.method == 'POST' and form.is_valid():
+        # Don't process new moves if game is over
+        if game_state.game_over:
+            return redirect('game')
+            
         choice = form.cleaned_data['choice']
         
         # Check if this exact message was just sent to prevent duplicates
         if not game_state.messages or game_state.messages[-1] != ("player", choice):
             game_state.messages.append(("player", choice))
+            
+            # Increment turn counter before processing
+            game_state.turn += 1
+            
+            # Create GameTurn record
+            GameTurn.objects.create(
+                attempt=attempt,
+                turn_number=game_state.turn,
+                player_input=choice,
+                game_response="",  # Will be updated after AI response
+                tension_change=0,  # Will be updated after AI response
+                trust_change=0,    # Will be updated after AI response
+            )
         
         success, message = process_turn(game_state, choice)
         if not success:
@@ -248,16 +287,34 @@ def play(request):
             return redirect('game')
 
         ai_response = json.loads(get_ai_response(game_state, choice))
+        
+        # Calculate changes in tension and trust
+        tension_change = ai_response['tension_level'] - game_state.tension
+        trust_change = ai_response['trust_level'] - game_state.trust
+        
         game_state.tension = ai_response['tension_level']
         game_state.trust = ai_response['trust_level']
         
         # Add AI's response to game state (check for duplicates)
+        suspect_response = ""
         if 'suspect_response' in ai_response:
             suspect_response = ai_response['suspect_response']
             if not game_state.messages or game_state.messages[-1] != ("suspect", suspect_response):
                 game_state.messages.append(("suspect", suspect_response))
         
+        # Update the GameTurn record with AI response
+        current_turn = GameTurn.objects.filter(
+            attempt=attempt,
+            turn_number=game_state.turn
+        ).latest('timestamp')
+        
+        current_turn.game_response = suspect_response
+        current_turn.tension_change = tension_change
+        current_turn.trust_change = trust_change
+        current_turn.save()
+        
         # Update attempt with current game state
+        attempt.current_turn = game_state.turn
         attempt.update_from_game_state(game_state)
         attempt.save()
         

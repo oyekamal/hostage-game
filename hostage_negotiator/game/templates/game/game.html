@@ -23,6 +23,18 @@
         </div>
     </div>
 
+    {% if game_state.game_over %}
+        <div class="game-over-message">
+            <h2>Game Over</h2>
+            {% if game_state.success %}
+                <p class="success-message">Negotiation successful!</p>
+            {% else %}
+                <p class="failure-message">Negotiation failed.</p>
+            {% endif %}
+            <a href="{% url 'index' %}" class="btn btn-primary">Return to Home</a>
+        </div>
+    {% endif %}
+    
     <div class="message-history">
         <h3>Conversation History</h3>
         <div class="message-container">
