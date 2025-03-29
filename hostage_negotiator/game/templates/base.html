@@ -207,6 +207,8 @@
             background: var(--primary);
             color: var(--secondary);
             margin-left: 20%;
+            border: 3px solid var(--accent);    /* Added prominent border */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);  /* Added shadow for more emphasis */
         }
 
         .message-sender {
@@ -222,8 +224,8 @@
             <h1>{% block header %}Hostage Negotiator{% endblock %}</h1>
             <nav class="nav-links">
                 <a href="{% url 'index' %}">Home</a>
-                <a href="{% url 'scenario_list' %}">Scenarios</a>
                 {% if user.is_authenticated %}
+                    <a href="{% url 'scenario_list' %}">Scenarios</a>
                     <a href="{% url 'game_history' %}">History</a>
                     <a href="{% url 'stats' %}">Stats</a>
                     <a href="{% url 'logout' %}">Logout</a>
