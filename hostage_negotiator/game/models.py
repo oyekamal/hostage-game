@@ -177,6 +177,9 @@ class ScenarioAttempt(models.Model):
         
         self.save()
 
+    def __str__(self):
+        return f"Attempt #{self.id} - {self.scenario_name} by {self.user.username if self.user else 'Guest'}"
+
 class Score(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scores')
     scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name='scores')
@@ -225,6 +228,9 @@ class Score(models.Model):
                 created_at=score.created_at
             )
 
+    def __str__(self):
+        return f"Score: {self.score} - {self.scenario_name} by {self.user.username if self.user else 'Guest'}"
+
 class GameTurn(models.Model):
     attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='turns')
     turn_number = models.IntegerField()
@@ -241,6 +247,9 @@ class GameTurn(models.Model):
         ]
         ordering = ['turn_number']
 
+    def __str__(self):
+        return f"Turn {self.turn_number} of Attempt #{self.attempt_id}"
+
 class PlayerPromise(models.Model):
     attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='promises')
     promise_text = models.TextField()
@@ -252,6 +261,10 @@ class PlayerPromise(models.Model):
         indexes = [
             models.Index(fields=['attempt']),
         ]
+
+    def __str__(self):
+        status = "Kept" if self.was_kept else "Pending" if self.turn_resolved is None else "Broken"
+        return f"Promise: {self.promise_text[:30]}... ({status})"
 
 class GameProgress(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='progress')
