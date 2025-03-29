@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 import json
 import random
 import requests
@@ -6,7 +7,11 @@ import logging
 from functools import lru_cache
 import hashlib
 
-API_KEY = os.getenv("GROK_API_KEY")
+# Load .env file
+load_dotenv()
+
+# Use uppercase for environment variables by convention
+API_KEY = os.getenv("API_KEY")
 
 logger = logging.getLogger(__name__)
 
