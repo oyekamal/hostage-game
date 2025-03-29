@@ -33,12 +33,18 @@ pip install -r requirements.txt
 ```
 
 4. Set up environment variables
-Create a `.env` file in the root directory and add the following:
+Copy `.env.example` to `.env`:
+```bash
+# Windows
+copy .env.example .env
+
+# macOS/Linux
+cp .env.example .env
 ```
-SECRET_KEY=your_django_secret_key
-DEBUG=True
-OPENAI_API_KEY=your_openai_api_key
-SENDGRID_API_KEY=your_sendgrid_api_key
+
+Then edit `.env` and add your Grok API key:
+```
+API_KEY=API_KEY_GROKs  # Replace with your actual Grok API key
 ```
 
 5. Run database migrations
