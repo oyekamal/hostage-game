@@ -21,22 +21,26 @@ def index(request):
     current_attempt = None
     can_play = True
     
+    today = datetime.utcnow().date().isoformat()
+    
     if request.user.is_authenticated:
-        # Get any in-progress game
+        # Get any in-progress game from database
         current_attempt = ScenarioAttempt.objects.filter(
             user=request.user,
             end_time__isnull=True
         ).select_related('scenario').first()
         
         # Check if user has played today
-        today = datetime.utcnow().date()
         played_today = ScenarioAttempt.objects.filter(
             user=request.user,
             start_time__date=today,
             end_time__isnull=False
         ).exists()
-        
-        can_play = not played_today
+    else:
+        # For guests, check session
+        guest_last_played = request.session.get('guest_last_played')
+        can_play = guest_last_played != today
+        current_attempt = request.session.get('guest_current_attempt')
     
     return render(request, 'game/index.html', {
         'current_attempt': current_attempt,
@@ -147,13 +151,14 @@ def scenario_list(request):
     })
 
 def start_game(request, scenario_id=None):
+    today = datetime.utcnow().date().isoformat()
+    
     if scenario_id:
         scenario = get_object_or_404(Scenario, id=scenario_id)
     else:
         scenario = Scenario.objects.latest('created_at')
     
-    # Check if user already played this scenario today
-    today = datetime.utcnow().date()
+    # Check if already played today
     if request.user.is_authenticated:
         existing_attempt = ScenarioAttempt.objects.filter(
             user=request.user,
@@ -163,8 +168,13 @@ def start_game(request, scenario_id=None):
         ).exists()
         
         if existing_attempt:
-            messages.error(request, 'You have already played this scenario today')
-            return redirect('scenario_list')
+            messages.error(request, 'You have already played today')
+            return redirect('index')
+    else:
+        # Check guest session
+        if request.session.get('guest_last_played') == today:
+            messages.error(request, 'You have already played today. Come back tomorrow!')
+            return redirect('index')
     
     # Create game state
     game_state = GameState(
@@ -175,44 +185,48 @@ def start_game(request, scenario_id=None):
     )
     game_state.messages.append(("suspect", scenario.opening_dialogue))
     
-    # Create scenario attempt
-    attempt = ScenarioAttempt.objects.create(
-        user=request.user if request.user.is_authenticated else None,
-        scenario=scenario,
-        scenario_name=scenario.name,
-        initial_tension=game_state.tension,
-        initial_trust=game_state.trust,
-        initial_hostages=game_state.hostages,
-        current_tension=game_state.tension,
-        current_trust=game_state.trust,
-        current_hostages=game_state.hostages,
-        messages=game_state.messages
-    )
-    
-    # Store attempt ID in session
-    request.session['current_attempt_id'] = attempt.id
+    if request.user.is_authenticated:
+        # Create database attempt for authenticated users
+        attempt = ScenarioAttempt.objects.create(
+            user=request.user,
+            scenario=scenario,
+            scenario_name=scenario.name,
+            initial_tension=game_state.tension,
+            initial_trust=game_state.trust,
+            initial_hostages=game_state.hostages,
+            current_tension=game_state.tension,
+            current_trust=game_state.trust,
+            current_hostages=game_state.hostages,
+            messages=game_state.messages
+        )
+        request.session['current_attempt_id'] = attempt.id
+    else:
+        # Store attempt in session for guests
+        guest_attempt = {
+            'game_state': game_state.to_dict(),
+            'scenario_name': scenario.name,
+            'start_time': datetime.utcnow().isoformat()
+        }
+        request.session['guest_current_attempt'] = guest_attempt
     
     return redirect('game')
 
 def game(request):
-    attempt_id = request.session.get('current_attempt_id')
-    if not attempt_id:
-        return redirect('index')
+    if request.user.is_authenticated:
+        attempt_id = request.session.get('current_attempt_id')
+        if not attempt_id:
+            return redirect('index')
+        
+        attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
+        game_state = attempt.get_game_state()
+    else:
+        guest_attempt = request.session.get('guest_current_attempt')
+        if not guest_attempt:
+            return redirect('index')
+        
+        game_state = GameState.from_dict(guest_attempt['game_state'])
     
-    attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
-    game_state = attempt.get_game_state()
     form = GameResponseForm()
-    
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_messages = []
-    for msg in game_state.messages:
-        msg_tuple = (msg[0], msg[1])
-        if msg_tuple not in seen:
-            seen.add(msg_tuple)
-            unique_messages.append(msg)
-    
-    game_state.messages = unique_messages
     
     context = {
         'game_state': game_state,
@@ -223,20 +237,26 @@ def game(request):
     
     return render(request, 'game/game.html', context)
 
-@login_required
 def play(request):
-    attempt_id = request.session.get('current_attempt_id')
-    if not attempt_id:
-        messages.error(request, 'No active game found.')
-        return redirect('index')
-        
-    attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
-    game_state = attempt.get_game_state()
+    if request.user.is_authenticated:
+        attempt_id = request.session.get('current_attempt_id')
+        if not attempt_id:
+            messages.error(request, 'No active game found.')
+            return redirect('index')
+            
+        attempt = get_object_or_404(ScenarioAttempt, id=attempt_id)
+        game_state = attempt.get_game_state()
+    else:
+        guest_attempt = request.session.get('guest_current_attempt')
+        if not guest_attempt:
+            messages.error(request, 'No active game found.')
+            return redirect('index')
+            
+        game_state = GameState.from_dict(guest_attempt['game_state'])
     
     # Check if game should be ended
-    if game_state.turn >= 10:
+    if game_state.turn >= 10 or game_state.game_over:
         game_state.game_over = True
-        # Determine success based on final state
         if game_state.tension <= 2 and game_state.trust >= 7:
             game_state.success = True
             game_state.messages.append(("system", "The suspect's resolve has completely broken. Negotiation successful!"))
@@ -244,81 +264,52 @@ def play(request):
             game_state.success = False
             game_state.messages.append(("system", "Time has run out. Negotiation failed."))
         
-        # Update attempt with final state
-        attempt.update_from_game_state(game_state)
-        attempt.end_time = datetime.utcnow()
-        attempt.save()
-        
-        # Calculate and save score
         if request.user.is_authenticated:
+            attempt.update_from_game_state(game_state)
+            attempt.end_time = datetime.utcnow()
+            attempt.save()
             save_game_score(request, request.user.id, game_state)
-        
-        return redirect('game')
+            request.session.pop('current_attempt_id', None)
+            return redirect('stats')
+        else:
+            # For guests, mark the day as played and clear current attempt
+            request.session['guest_last_played'] = datetime.utcnow().date().isoformat()
+            request.session.pop('guest_current_attempt', None)
+            return redirect('index')
     
     form = GameResponseForm(request.POST or None)
     
     if request.method == 'POST' and form.is_valid():
-        # Don't process new moves if game is over
-        if game_state.game_over:
-            return redirect('game')
-            
         choice = form.cleaned_data['choice']
         
-        # Check if this exact message was just sent to prevent duplicates
         if not game_state.messages or game_state.messages[-1] != ("player", choice):
+            # Add player's message
             game_state.messages.append(("player", choice))
             
-            # Increment turn counter before processing
-            game_state.turn += 1
+            # Get AI response
+            ai_response_data = get_ai_response(game_state, choice)
             
-            # Create GameTurn record
-            GameTurn.objects.create(
-                attempt=attempt,
-                turn_number=game_state.turn,
-                player_input=choice,
-                game_response="",  # Will be updated after AI response
-                tension_change=0,  # Will be updated after AI response
-                trust_change=0,    # Will be updated after AI response
-            )
-        
-        success, message = process_turn(game_state, choice)
-        if not success:
-            messages.error(request, message)
-            return redirect('game')
-
-        ai_response = json.loads(get_ai_response(game_state, choice))
-        
-        # Calculate changes in tension and trust
-        tension_change = ai_response['tension_level'] - game_state.tension
-        trust_change = ai_response['trust_level'] - game_state.trust
-        
-        game_state.tension = ai_response['tension_level']
-        game_state.trust = ai_response['trust_level']
-        
-        # Add AI's response to game state (check for duplicates)
-        suspect_response = ""
-        if 'suspect_response' in ai_response:
-            suspect_response = ai_response['suspect_response']
-            if not game_state.messages or game_state.messages[-1] != ("suspect", suspect_response):
-                game_state.messages.append(("suspect", suspect_response))
-        
-        # Update the GameTurn record with AI response
-        current_turn = GameTurn.objects.filter(
-            attempt=attempt,
-            turn_number=game_state.turn
-        ).latest('timestamp')
-        
-        current_turn.game_response = suspect_response
-        current_turn.tension_change = tension_change
-        current_turn.trust_change = trust_change
-        current_turn.save()
-        
-        # Update attempt with current game state
-        attempt.current_turn = game_state.turn
-        attempt.update_from_game_state(game_state)
-        attempt.save()
-        
-        return redirect('game')
+            try:
+                ai_response = json.loads(ai_response_data)
+                
+                # Update game state based on AI response
+                game_state.tension = ai_response.get('tension_level', game_state.tension)
+                game_state.trust = ai_response.get('trust_level', game_state.trust)
+                
+                # Update turn counter
+                game_state.turn += 1
+                
+                # Save the updated state
+                if request.user.is_authenticated:
+                    attempt.update_from_game_state(game_state)
+                    attempt.save()
+                else:
+                    guest_attempt['game_state'] = game_state.to_dict()
+                    request.session['guest_current_attempt'] = guest_attempt
+                    
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse AI response: {ai_response_data}")
+                messages.error(request, "An error occurred while processing your response.")
     
     return redirect('game')
 

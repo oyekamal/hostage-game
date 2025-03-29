@@ -54,8 +54,11 @@ class GameState:
             self.similar_inputs_count = 0
             self.last_input_type = text.strip()
 
-        # Check for surrender acceptance
+        # Check for surrender acceptance - this should be checked first
         if self.surrender_offered and any(word in text for word in ["yes", "accept", "agree", "okay", "ok"]):
+            self.game_over = True
+            self.success = True
+            self.release_hostages(surrender=True)
             return 'accept_surrender'
 
         # Emotional Appeal Detection
@@ -221,11 +224,14 @@ class GameState:
         """Handle the release of hostages"""
         if surrender:
             self.hostages_released = self.hostages
+            self.hostages = 0  # All hostages are released
             self.game_over = True
             self.success = True
             self.messages.append(("system", "The suspect has surrendered and released all hostages. Negotiation successful!"))
+            return True
         else:
             self.messages.append(("system", "The suspect isn't ready to release hostages yet. Keep building trust."))
+            return False
 
     def process_ai_response(self, response):
         """Process AI response and update game state"""
@@ -407,11 +413,14 @@ def release_hostages(self, surrender=False):
     logging.debug(f"Releasing hostages, surrender={surrender}")
     if surrender:
         self.hostages_released = self.hostages
+        self.hostages = 0  # All hostages are released
         self.game_over = True
         self.success = True
         self.messages.append(("system", "The suspect has surrendered and released all hostages. Negotiation successful!"))
+        return True
     else:
         self.messages.append(("system", "The suspect isn't ready to release hostages yet. Keep building trust."))
+        return False
 
 def requires_login(self):
     """Login is now optional"""

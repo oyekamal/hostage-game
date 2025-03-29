@@ -24,15 +24,29 @@
     </div>
 
     {% if game_state.game_over %}
-        <div class="game-over-message">
-            <h2>Game Over</h2>
-            {% if game_state.success %}
-                <p class="success-message">Negotiation successful!</p>
+        <div class="game-over-section">
+            {% if not user.is_authenticated %}
+                <div class="signup-prompt">
+                    <h3>Game Over - Want to see your stats?</h3>
+                    <p>Create an account to:</p>
+                    <ul>
+                        <li>View your negotiation statistics</li>
+                        <li>Track your progress</li>
+                        <li>Access more scenarios</li>
+                    </ul>
+                    <div class="signup-buttons">
+                        <a href="{% url 'register' %}" class="btn btn-primary">Sign Up Now</a>
+                        <a href="{% url 'login' %}" class="btn btn-secondary">Login</a>
+                    </div>
+                </div>
             {% else %}
-                <p class="failure-message">Negotiation failed.</p>
+                <div class="stats-redirect">
+                    <p>Game Over!</p>
+                    <a href="{% url 'stats' %}" class="btn btn-primary">View Your Stats</a>
+                </div>
             {% endif %}
-            <a href="{% url 'index' %}" class="btn btn-primary">Return to Home</a>
         </div>
+   
     {% endif %}
     
     <div class="message-history">
@@ -277,6 +291,56 @@
         .send-button {
             width: 100%;
         }
+    }
+</style>
+<style>
+    .game-over-section {
+        margin: 20px auto;
+        max-width: 600px;
+        text-align: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+    }
+
+    .stats-redirect {
+        padding: 20px;
+        text-align: center;
+    }
+
+    .stats-redirect .btn-primary {
+        display: inline-block;
+        margin-top: 15px;
+        padding: 10px 25px;
+        background: var(--accent);
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background 0.3s ease;
+    }
+
+    .stats-redirect .btn-primary:hover {
+        background: var(--accent-dark);
+    }
+
+    .signup-prompt {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .signup-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    .signup-buttons .btn {
+        padding: 10px 20px;
+        border-radius: 4px;
+        text-decoration: none;
     }
 </style>
 {% endblock %}
