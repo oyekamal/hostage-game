@@ -8,11 +8,11 @@ A text-based hostage negotiation simulation game built with Django where players
 - pip (Python package installer)
 - Virtual environment (recommended)
 
-## Installation
+## Quick Start
 
 1. Clone the repository
 ```bash
-git clone https://github.com/oyekamal/hostage-game
+git clone [your-repository-url]
 cd hostage-negotiator
 ```
 
@@ -33,12 +33,18 @@ pip install -r requirements.txt
 ```
 
 4. Set up environment variables
-Create a `.env` file in the root directory and add the following:
+Copy `.env.example` to `.env`:
+```bash
+# Windows
+copy .env.example .env
+
+# macOS/Linux
+cp .env.example .env
 ```
-SECRET_KEY=your_django_secret_key
-DEBUG=True
-OPENAI_API_KEY=your_openai_api_key
-SENDGRID_API_KEY=your_sendgrid_api_key
+
+Then edit `.env` and add your Grok API key:
+```
+API_KEY=API_KEY_GROKs  # Replace with your actual Grok API key
 ```
 
 5. Run database migrations
@@ -47,20 +53,28 @@ python manage.py makemigrations
 python manage.py migrate
 ```
 
-6. Create a superuser (admin)
-```bash
-python manage.py createsuperuser
-```
-
-## Running the Development Server
-
-1. Make sure your virtual environment is activated
-2. Start the development server:
+6. Start the development server
 ```bash
 python manage.py runserver
 ```
-3. Access the application at `http://localhost:8000`
-4. Access the admin interface at `http://localhost:8000/admin`
+
+7. Access the application:
+- Main application: `http://localhost:8000`
+- Admin interface: `http://localhost:8000/admin`
+
+## Default Admin Credentials
+
+The application comes with a default admin user:
+- Username: `admin`
+- Email: `admin@gmail.com`
+- Password: `admin`
+
+You can use these credentials to log in to both the main application and the admin interface. It's recommended to change the password after first login.
+
+To create additional superusers:
+```bash
+python manage.py createsuperuser
+```
 
 ## Features
 
