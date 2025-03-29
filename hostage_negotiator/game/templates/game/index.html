@@ -1,29 +1,208 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    {% if request.user.is_authenticated %}
-        <p>Hello, {{ request.user.username }}!</p>
-        
-        <div class="nav-links">
+    <div class="home-container">
+        {% if request.user.is_authenticated %}
+            <div class="welcome-section">
+                <h2>Welcome back, {{ request.user.username }}!</h2>
+            </div>
+            
             {% if current_attempt %}
-                <a href="{% url 'resume_game' current_attempt.id %}">Resume Current Game</a>
+                <div class="active-game-card">
+                    <div class="game-status-indicator">
+                        <span class="pulse-dot"></span>
+                        Active Mission
+                    </div>
+                    
+                    <div class="game-info">
+                        <h3>{{ current_attempt.scenario.name }}</h3>
+                        <div class="game-meta">
+                            <span class="time-label">Started:</span>
+                            <span class="time-value">{{ current_attempt.start_time|date:"g:i A" }}</span>
+                            <span class="date-value">{{ current_attempt.start_time|date:"M j, Y" }}</span>
+                        </div>
+                    </div>
+
+                    <a href="{% url 'resume_game' current_attempt.id %}" class="resume-button">
+                        <span class="button-text">Return to Mission</span>
+                        <span class="button-icon">→</span>
+                    </a>
+                </div>
             {% else %}
-                <a href="{% url 'start_daily_game' %}">Play Daily Scenario</a>
+                <div class="start-game-section">
+                    <a href="{% url 'start_daily_game' %}" class="start-button">
+                        <span class="button-text">Start Daily Scenario</span>
+                        <span class="button-icon">→</span>
+                    </a>
+                </div>
             {% endif %}
-        </div>
 
-    {% else %}
-        <div class="nav-links">
-            <a href="{% url 'start_daily_game' %}">Play as Guest</a>
-        </div>
-    {% endif %}
+        {% else %}
+            <div class="guest-section">
+                <h2>Welcome to Hostage Negotiator</h2>
+                <p>Test your negotiation skills in intense crisis situations</p>
+                <div class="guest-actions">
+                    <a href="{% url 'start_daily_game' %}" class="start-button">
+                        <span class="button-text">Play as Guest</span>
+                        <span class="button-icon">→</span>
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
 
-    {% if current_attempt %}
-        <div style="margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px;">
-            <h3>Current Game in Progress</h3>
-            <p>Scenario: {{ current_attempt.scenario.name }}</p>
-            <p>Started: {{ current_attempt.start_time|date:"F j, Y H:i" }}</p>
-            <a href="{% url 'resume_game' current_attempt.id %}" style="color: #007bff;">Resume Game</a>
-        </div>
-    {% endif %}
+    <style>
+        .home-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .welcome-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .welcome-section h2 {
+            color: var(--text);
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .active-game-card {
+            background: var(--secondary);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            position: relative;
+            border: 2px solid var(--primary);
+            transition: transform 0.2s ease;
+        }
+
+        .active-game-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .game-status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent);
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .game-info {
+            margin-bottom: 1.5rem;
+        }
+
+        .game-info h3 {
+            color: var(--primary);
+            font-size: 1.4rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .game-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .time-label {
+            color: var(--text-muted);
+        }
+
+        .time-value {
+            font-weight: 500;
+        }
+
+        .date-value {
+            color: var(--text-muted);
+            margin-left: 0.5rem;
+        }
+
+        .resume-button, .start-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--primary);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        .resume-button:hover, .start-button:hover {
+            background: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .button-icon {
+            transition: transform 0.2s ease;
+        }
+
+        .resume-button:hover .button-icon, 
+        .start-button:hover .button-icon {
+            transform: translateX(5px);
+        }
+
+        .guest-section {
+            text-align: center;
+            padding: 3rem 1rem;
+        }
+
+        .guest-section h2 {
+            color: var(--text);
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .guest-section p {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+
+        .guest-actions {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .home-container {
+                padding: 1rem;
+            }
+
+            .welcome-section h2 {
+                font-size: 1.5rem;
+            }
+
+            .game-info h3 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</div>
 {% endblock %}

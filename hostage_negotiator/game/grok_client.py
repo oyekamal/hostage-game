@@ -1,32 +1,31 @@
 import os
 from dotenv import load_dotenv
-load_dotenv()
-api_key = os.getenv("api_key")
-import logging
-import random
 import json
-from openai import OpenAI
+import random
+import requests
+import logging
 from functools import lru_cache
 import hashlib
-import time
 
-# Initialize Grok AI client
-client = OpenAI(
-    base_url="https://api.x.ai/v1",
-    api_key=api_key
-)
+# Load .env file
+load_dotenv()
+
+# Use uppercase for environment variables by convention
+API_KEY = os.getenv("API_KEY")
+
+logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1000)
-def get_cached_response(input_hash, mood, suspect_type):
+def get_cached_response(input_hash, tension, suspect_type):
     """Cache for AI responses based on input and context"""
-    return None  # Return None to indicate cache miss
+    return None
 
-def get_ai_response(game_state, player_choice):
-    """Generate an emotionally intelligent response based on game state and player choice."""
+def get_ai_response(game_state, choice, offer=None, green_beret_action=None):
+    """Generate an AI response based on game state and player choice."""
     try:
-        # Generate cache key based on input and context
+        # Generate cache key
         cache_key = hashlib.md5(
-            f"{player_choice}:{game_state.tension}:{game_state.scenario.suspect_type}".encode()
+            f"{choice}:{game_state.tension}:{game_state.scenario.suspect_type}".encode()
         ).hexdigest()
 
         # Check cache first
@@ -34,104 +33,191 @@ def get_ai_response(game_state, player_choice):
         if cached_response:
             return cached_response
 
-        # Create dynamic system message
-        system_message = f"""You are a highly realistic hostage-taker AI, trained on real-world crisis psychology and FBI tactics. Keep responses concise, impactful, and focused on demands.
+        if not API_KEY:
+            return json.dumps(get_mock_response(game_state))
 
-        🧠 Core Rules:
-        - Keep responses under 30 words
-        - Focus on immediate demands and consequences
-        - No solutions or hints
-        - Stay in character
-        - React with emotional complexity
-        - Ensure 5-10 turn gameplay
+        tension_level = game_state.tension
+        trust_level = game_state.trust
+        scenario = game_state.scenario
 
-        Current Profile:
-        - Tension: {game_state.tension}/10
-        - Hostages: {game_state.hostages - game_state.hostages_released}
-        - Demand: {game_state.scenario.demand}
-        - Trust: {game_state.trust}/10"""
+        # Determine emotional state
+        emotional_state = get_emotional_state(tension_level)
 
-        # Build prompt with current context
-        prompt = f"""Current Situation:
+        # Handle special scenarios
+        if green_beret_action:
+            return handle_green_beret_scenario(game_state, green_beret_action)
+
+        # Build system message
+        system_message = build_system_message(game_state, emotional_state)
+
+        # Build user prompt
+        user_prompt = build_user_prompt(game_state, choice, offer, emotional_state)
+
+        # Make API call
+        response = make_api_call(system_message, user_prompt)
+        
+        # Process response
+        processed_response = process_api_response(response, game_state)
+        
+        # Cache the response
+        get_cached_response(cache_key, tension_level, game_state.scenario.suspect_type)
+        
+        return json.dumps(processed_response)
+
+    except Exception as e:
+        logger.error(f"Error in get_ai_response: {e}")
+        return json.dumps(get_fallback_response(game_state.tension))
+
+def get_emotional_state(tension):
+    """Determine emotional state based on tension level"""
+    if tension >= 7:
+        return 'volatile'
+    elif tension >= 4:
+        return 'agitated'
+    elif tension >= 2:
+        return 'strategic'
+    else:
+        return 'resigned'
+
+def handle_green_beret_scenario(game_state, action_type):
+    """Handle special Green Beret scenarios"""
+    if action_type == "green_beret_scenario":
+        return handle_automatic_win(game_state)
+    elif action_type == "tactical_intervention":
+        return handle_tactical_intervention(game_state)
+
+def build_system_message(game_state, emotional_state):
+    """Build the system message for the AI"""
+    return f"""You are a highly realistic hostage-taker AI in a {emotional_state} state.
+Current Profile:
+- Tension: {game_state.tension}/10
+- Trust: {game_state.trust}/10
+- Hostages: {game_state.hostages - game_state.hostages_released}
+- Demand: {game_state.scenario.demand}
+
+Emotional State Rules:
+{get_emotional_state_rules(emotional_state)}"""
+
+def build_user_prompt(game_state, choice, offer, emotional_state):
+    """Build the user prompt for the AI"""
+    return f"""Current Situation:
 Turn: {game_state.turn}/10
 Tension: {game_state.tension}/10
 Trust: {game_state.trust}/10
+Emotional State: {emotional_state}
 
-Negotiator Says: "{player_choice}"
+Negotiator Says: "{choice}"
+{f'Offer: {offer}' if offer else ''}
 
-Generate a short, tense response that:
+Generate a response that:
 1. Matches tension level ({game_state.tension}/10)
 2. Shows authentic crisis behavior
-3. Keeps focus on demands
-4. Maintains intensity without being verbose"""
+3. Maintains scenario consistency
+4. Keeps focus on demands"""
 
-        response = client.chat.completions.create(
-            model="grok-2-1212",
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=100,
-            temperature=0.7
-        )
+def make_api_call(system_message, user_prompt):
+    """Make the API call to the AI service"""
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "grok-2",  # Updated model name
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_prompt}
+        ],
+        "max_tokens": 150,
+        "temperature": 0.7
+    }
+    
+    logger.debug("Making API call to Grok")
+    logger.debug(f"Payload: {payload}")
+    
+    response = requests.post(
+        "https://api.x.ai/v1/chat/completions",
+        json=payload,
+        headers=headers,
+        timeout=15
+    )
+    
+    logger.debug(f"API response status: {response.status_code}")
+    logger.debug(f"API response content: {response.text}")
+    
+    if response.status_code != 200:
+        logger.error(f"API error: {response.text}")
+        return {"choices": [{"message": {"content": get_fallback_response(0)["suspect_response"]}}]}
+        
+    return response.json()
 
-        ai_response = response.choices[0].message.content.strip()
+def get_mock_response(game_state):
+    """Generate more realistic mock responses based on game state"""
+    emotional_state = game_state.get_emotional_state()
+    
+    responses = {
+        'volatile': [
+            "Don't try anything stupid! I'm watching every move!",
+            "You better take me seriously or someone gets hurt!",
+            "Time is running out! Make it happen NOW!"
+        ],
+        'agitated': [
+            "I need guarantees before we move forward.",
+            "Your words mean nothing without action!",
+            "Show me you're serious about meeting my demands."
+        ],
+        'strategic': [
+            "Let's be clear about what each side needs here.",
+            "I'm listening, but I need more than just promises.",
+            "We can work this out if you meet my terms."
+        ],
+        'resigned': [
+            "Maybe we can find a way out of this...",
+            "I never wanted anyone to get hurt...",
+            "What assurances can you give me?"
+        ]
+    }
+    
+    suspect_response = random.choice(responses.get(emotional_state, responses['strategic']))
+    
+    return {
+        "tension_level": max(1, min(10, game_state.tension)),
+        "trust_level": max(1, min(10, game_state.trust)),
+        "suspect_response": suspect_response,
+        "counter_offer": None,
+        "daily_hint": get_contextual_hint(game_state),
+        "hostage_count": game_state.hostages,
+        "turn_count": game_state.turn
+    }
 
-        # Clean up response formatting
-        ai_response = ai_response.strip('"\'')  # Remove quotes
-        ai_response = ai_response.split('\n')[0]  # Take only the first line
-        ai_response = ai_response.split('{')[0].strip()  # Remove any JSON-like content
-
-        # Track repetition silently
-        input_history = [msg[1] for msg in game_state.messages[-5:] if msg[0] == 'player']
-        if input_history.count(player_choice) > 3:
-            game_state.tension += 1
-            game_state.trust -= 1
-
-        # Cache the successful response
-        get_cached_response.cache_info()
-        get_cached_response(cache_key, game_state.tension, game_state.scenario.suspect_type)
-
-        # Return structured JSON with cleaned response
-        ai_response_dict = {
-            "suspect_response": ai_response,
-            "tension_level": game_state.tension,
-            "trust_level": game_state.trust,
-            "hostage_count": game_state.hostages - game_state.hostages_released,
-            "turn_count": game_state.turn,
-            "recommended_ui_action": "Show suspect with tension-appropriate behavior",
-            "daily_hint": random.choice([
-                "Tomorrow will test you further!",
-                "A bigger crisis awaits tomorrow!",
-                "Prepare for more tomorrow!"
-            ])
-        }
-        return json.dumps(ai_response_dict)
-
-    except Exception as e:
-        logging.error(f"Error getting AI response: {e}")
-        return json.dumps(get_fallback_response(game_state.tension))
+def get_contextual_hint(game_state):
+    """Generate contextual hints based on game state"""
+    if game_state.tension >= 8:
+        return "Tension is very high. Focus on de-escalation."
+    elif game_state.trust <= 3:
+        return "Trust is low. Show empathy and understanding."
+    elif game_state.turn >= 8:
+        return "Time is running out. Consider making a significant offer."
+    else:
+        return "Keep building rapport through active listening."
 
 def get_fallback_response(tension):
     """Get fallback response based on tension level"""
     fallback_responses = {
-        range(0, 2): "Maybe you're right... I just want this to end without anyone getting hurt.",
-        range(2, 4): "I'm listening... but I still don't fully trust this.",
-        range(4, 7): "You better not be playing games with me! I MEAN IT!",
-        range(7, 11): "SHUT UP! ONE MORE WORD AND SOMEONE DIES RIGHT NOW!"
+        range(0, 3): "I hear you... let's keep talking.",
+        range(3, 6): "You better make this worth my time!",
+        range(6, 8): "Don't try anything stupid!",
+        range(8, 11): "One wrong move and this ends badly!"
     }
-    current_tension_range = next(
-        tension_range for tension_range in fallback_responses.keys() 
-        if tension in tension_range
-    )
+    current_range = next(r for r in fallback_responses.keys() if tension in r)
     return {
-        "suspect_response": fallback_responses[current_tension_range],
         "tension_level": tension,
         "trust_level": 0,
+        "suspect_response": fallback_responses[current_range],
+        "counter_offer": None,
+        "daily_hint": "System recovering, try again.",
         "hostage_count": 0,
-        "turn_count": 0,
-        "recommended_ui_action": "Show suspect with tension-appropriate behavior",
-        "daily_hint": "Try again tomorrow!"
+        "turn_count": 0
     }
 
 def analyze_game_session(game_state):
@@ -169,3 +255,75 @@ History:
     except Exception as e:
         logging.error(f"Error generating game analysis: {e}")
         return "Unable to generate analysis at this time. Please try again later."
+
+def get_emotional_state_rules(emotional_state):
+    """Get rules for different emotional states"""
+    rules = {
+        'volatile': "Highly unstable, prone to violent outbursts, requires extreme caution",
+        'agitated': "Easily provoked, needs reassurance, sensitive to threats",
+        'strategic': "Calculated responses, focused on demands, evaluates options",
+        'resigned': "More open to negotiation, showing signs of fatigue or doubt"
+    }
+    return rules.get(emotional_state, rules['strategic'])
+
+def process_api_response(response, game_state):
+    """Process the API response and format it for the game"""
+    try:
+        if 'choices' not in response or not response['choices']:
+            return get_fallback_response(game_state.tension)
+
+        ai_message = response['choices'][0]['message']['content']
+        
+        # Calculate remaining hostages
+        remaining_hostages = game_state.hostages - game_state.hostages_released
+        
+        # Add the AI response to messages
+        game_state.messages.append(("suspect", ai_message))
+        
+        return {
+            "tension_level": game_state.tension,
+            "trust_level": game_state.trust,
+            "suspect_response": ai_message,
+            "counter_offer": None,
+            "daily_hint": get_contextual_hint(game_state),
+            "hostage_count": remaining_hostages,
+            "turn_count": game_state.turn,
+            "hostages_released": game_state.hostages_released,
+            "messages": game_state.messages  # Include updated messages
+        }
+    except Exception as e:
+        logger.error(f"Error processing API response: {e}")
+        return get_fallback_response(game_state.tension)
+
+def test_grok_connection():
+    """Test the Grok API connection"""
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "grok-2",  # Updated model name
+        "messages": [
+            {"role": "user", "content": "Hello, are you working?"}
+        ],
+        "max_tokens": 50,
+        "temperature": 0.7
+    }
+    
+    try:
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=15
+        )
+        
+        logger.debug(f"Test API status: {response.status_code}")
+        logger.debug(f"Test API response: {response.text}")
+        
+        return response.status_code == 200
+        
+    except Exception as e:
+        logger.error(f"Test API error: {e}")
+        return False

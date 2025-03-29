@@ -1,20 +1,169 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1>Available Scenarios</h1>
+<div class="scenarios-container">
+    <h1>Available Scenarios</h1>
+    
+    <div class="scenario-grid">
+        {% for data in scenario_data %}
+            <div class="scenario-card {% if data.completed %}completed{% endif %}">
+                <div class="scenario-header">
+                    <h2>{{ data.scenario.name }}</h2>
+                    {% if data.completed %}
+                        <span class="completion-badge">✓ Completed</span>
+                    {% endif %}
+                </div>
+                
+                <div class="scenario-details">
+                    <div class="detail-item">
+                        <span class="detail-icon">🏢</span>
+                        <span class="detail-label">Setting:</span>
+                        <span class="detail-value">{{ data.scenario.setting }}</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-icon">👥</span>
+                        <span class="detail-label">Hostages:</span>
+                        <span class="detail-value">{{ data.scenario.hostages }}</span>
+                    </div>
 
-{% for data in scenario_data %}
-    <div class="scenario-card {% if data.completed %}completed{% endif %}">
-        <h2>{{ data.scenario.name }}</h2>
-        <p>Setting: {{ data.scenario.setting }}</p>
-        <p>Hostages: {{ data.scenario.hostages }}</p>
-        {% if data.attempts_count > 0 %}
-            <p>Attempts: {{ data.attempts_count }}</p>
-            {% if data.best_score %}
-                <p>Best Score: {{ data.best_score }}</p>
-            {% endif %}
-        {% endif %}
-        <a href="{% url 'start_game' data.scenario.id %}" class="btn btn-primary">Play Scenario</a>
+                    {% if data.attempts_count > 0 %}
+                        <div class="detail-item">
+                            <span class="detail-icon">🎯</span>
+                            <span class="detail-label">Attempts:</span>
+                            <span class="detail-value">{{ data.attempts_count }}</span>
+                        </div>
+                        
+                        {% if data.best_score %}
+                            <div class="detail-item">
+                                <span class="detail-icon">🏆</span>
+                                <span class="detail-label">Best Score:</span>
+                                <span class="detail-value">{{ data.best_score }}</span>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+
+                <div class="scenario-footer">
+                    <a href="{% url 'start_game' data.scenario.id %}" class="btn btn-primary">Play Scenario</a>
+                </div>
+            </div>
+        {% endfor %}
     </div>
-{% endfor %}
+</div>
+
+<style>
+    .scenarios-container {
+        padding: 0 1rem;
+    }
+
+    .scenarios-container h1 {
+        color: var(--text);
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .scenario-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .scenario-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid var(--darker-beige);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .scenario-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .scenario-card.completed {
+        border: 2px solid var(--primary);
+    }
+
+    .scenario-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--darker-beige);
+    }
+
+    .scenario-header h2 {
+        color: var(--primary);
+        margin: 0;
+        font-size: 1.4rem;
+        font-weight: 600;
+    }
+
+    .completion-badge {
+        background-color: var(--primary);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .scenario-details {
+        flex-grow: 1;
+    }
+
+    .detail-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.8rem;
+        font-size: 0.95rem;
+    }
+
+    .detail-icon {
+        width: 24px;
+        margin-right: 0.5rem;
+    }
+
+    .detail-label {
+        font-weight: 500;
+        margin-right: 0.5rem;
+        color: var(--text);
+        min-width: 80px;
+    }
+
+    .detail-value {
+        color: var(--text);
+    }
+
+    .scenario-footer {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--darker-beige);
+    }
+
+    .scenario-footer .btn {
+        width: 100%;
+        text-align: center;
+        font-weight: 500;
+    }
+
+    @media (max-width: 768px) {
+        .scenario-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            padding: 0.5rem;
+        }
+
+        .scenario-card {
+            padding: 1rem;
+        }
+    }
+</style>
 {% endblock %}

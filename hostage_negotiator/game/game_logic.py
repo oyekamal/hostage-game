@@ -25,6 +25,12 @@ class GameState:
     similar_inputs_count: int = 0
     last_input_type: str = None
     emotional_appeals_count: int = 0
+    # Add these new counter attributes
+    tactical_empathy_success: int = 0
+    tactical_empathy_failure: int = 0
+    mirroring_count: int = 0
+    emotional_labeling_success: int = 0
+    emotional_labeling_failure: int = 0
 
     def __post_init__(self):
         """Initialize message list if not provided"""
@@ -48,8 +54,11 @@ class GameState:
             self.similar_inputs_count = 0
             self.last_input_type = text.strip()
 
-        # Check for surrender acceptance
+        # Check for surrender acceptance - this should be checked first
         if self.surrender_offered and any(word in text for word in ["yes", "accept", "agree", "okay", "ok"]):
+            self.game_over = True
+            self.success = True
+            self.release_hostages(surrender=True)
             return 'accept_surrender'
 
         # Emotional Appeal Detection
@@ -98,65 +107,131 @@ class GameState:
 
         return 'neutral'
 
+    def get_emotional_state(self):
+        if self.tension >= 7:
+            return 'volatile'
+        elif 4 <= self.tension <= 6:
+            return 'agitated'
+        elif 2 <= self.tension <= 3:
+            return 'strategic'
+        else:
+            return 'resigned'
+
     def adjust_state(self, response_type):
         """Enhanced state adjustment with trust and tension mechanics"""
         logging.debug(f"Adjusting state for response type: {response_type}")
 
         # Base changes for each response type (tension, trust, score)
         changes = {
-            'empathy': {'tension': -2, 'trust': 2, 'score': 4},
-            'mirror': {'tension': -1, 'trust': 2, 'score': 3},
-            'action': {'tension': -2 if self.trust > 5 else 2, 'trust': 2 if self.tension <= 7 else -1, 'score': 4},
-            'calibrated': {'tension': -2, 'trust': 3, 'score': 5},
-            'release_request': {'tension': 3 if self.trust < 5 else -1, 'trust': -2 if self.tension >= 8 else 1, 'score': -3},
-            'accept_surrender': {'tension': 0, 'trust': 0, 'score': 0},
-            'neutral': {'tension': 1, 'trust': -1, 'score': -2},
-            'mistake': {'tension': 3, 'trust': -3, 'score': -5},
-            'overused_emotion': {'tension': 2, 'trust': -2, 'score': -4},
-            'unpredictable': {'tension': random.choice([-1, 1]), 'trust': random.choice([-1, 1]), 'score': 2}
+            'empathy': {
+                'tension': -2, 
+                'trust': 2,
+                'tactical_empathy_success': 1
+            },
+            'mirror': {
+                'tension': -1, 
+                'trust': 2,
+                'mirroring_count': 1
+            },
+            'emotional_label': {
+                'tension': -2, 
+                'trust': 2,
+                'emotional_labeling_success': 1
+            },
+            'action': {
+                'tension': -2 if self.trust > 5 else 2,
+                'trust': 2 if self.tension <= 7 else -1
+            },
+            'calibrated': {
+                'tension': -2,
+                'trust': 3
+            },
+            'release_request': {
+                'tension': 3 if self.trust < 5 else -1,
+                'trust': -2 if self.tension >= 8 else 1
+            },
+            'accept_surrender': {
+                'tension': 0,
+                'trust': 0
+            },
+            'neutral': {
+                'tension': 1,
+                'trust': -1,
+                'poor_choices': 1
+            },
+            'mistake': {
+                'tension': 3,
+                'trust': -3,
+                'poor_choices': 1
+            },
+            'overused_emotion': {
+                'tension': 2,
+                'trust': -2,
+                'emotional_appeals_count': 1
+            }
         }
 
-        # Get base changes
-        change = changes.get(response_type, {'tension': 0, 'trust': 0, 'score': 0})
-
-        # Apply anti-exploit mechanics
-        if self.similar_inputs_count >= 3:
-            change['tension'] += 2
-            change['trust'] -= 2
-            self.messages.append(("system", "Warning: Repeating the same approach may escalate the situation."))
-
+        change = changes.get(response_type, {'tension': 0, 'trust': 0})
+        
         # Process realistic consequences
-        self.tension = max(1, min(10, self.tension + change['tension']))
-        self.trust = max(1, min(10, self.trust + change['trust']))
+        self.tension = max(1, min(10, self.tension + change.get('tension', 0)))
+        self.trust = max(1, min(10, self.trust + change.get('trust', 0)))
+        
+        # Update counters
+        if change.get('tactical_empathy_success'):
+            self.tactical_empathy_success += 1
+        if change.get('mirroring_count'):
+            self.mirroring_count += 1
+        if change.get('emotional_labeling_success'):
+            self.emotional_labeling_success += 1
+        if change.get('poor_choices'):
+            self.poor_choices += 1
+        if change.get('emotional_appeals_count'):
+            self.emotional_appeals_count += 1
 
-        # Add randomized responses (20% chance)
-        if random.random() < 0.2:
-            random_responses = [
-                "This negotiation's getting interesting...",
-                "You think you've got me figured out?",
-                "Maybe I'll change my mind about everything!",
-                "Let's see if you can keep up..."
-            ]
-            self.messages.append(("suspect", random.choice(random_responses)))
+        # Consider hostage release based on trust and tension
+        emotional_state = self.get_emotional_state()
+        if not self.game_over:
+            if emotional_state == 'resigned' and self.trust >= 2:
+                self.consider_hostage_release(all_hostages=True)
+            elif emotional_state == 'strategic' and self.trust >= 4:
+                self.consider_hostage_release()
+            elif emotional_state == 'agitated' and self.trust >= 6:
+                self.consider_hostage_release()
+            elif emotional_state == 'volatile' and self.trust >= 8:
+                self.consider_hostage_release()
 
-        # Offer surrender at high trust and low tension
+        # Consider surrender
         if self.tension <= 2 and self.trust >= 8 and not self.surrender_offered:
             self.surrender_offered = True
             self.messages.append(("system", "The suspect is ready to surrender. Do you accept?"))
 
-        # Track poor tactical choices
-        if response_type in ['mistake', 'neutral', 'overused_emotion']:
-            self.poor_choices += 1
+    def consider_hostage_release(self, all_hostages=False):
+        """Consider releasing hostages based on current state"""
+        if self.hostages > self.hostages_released:
+            if all_hostages:
+                to_release = self.hostages - self.hostages_released
+            else:
+                to_release = 1
+            
+            self.hostages_released += to_release
+            self.hostages = self.hostages - to_release  # Add this line to update the hostage count
+            self.messages.append(("system", f"{to_release} hostage(s) released as a sign of good faith."))
+            return True
+        return False
 
     def release_hostages(self, surrender=False):
         """Handle the release of hostages"""
         if surrender:
             self.hostages_released = self.hostages
+            self.hostages = 0  # All hostages are released
             self.game_over = True
             self.success = True
             self.messages.append(("system", "The suspect has surrendered and released all hostages. Negotiation successful!"))
+            return True
         else:
             self.messages.append(("system", "The suspect isn't ready to release hostages yet. Keep building trust."))
+            return False
 
     def process_ai_response(self, response):
         """Process AI response and update game state"""
@@ -176,7 +251,7 @@ class GameState:
             if self.tension >= 10:
                 self.game_over = True
                 self.success = False
-                self.hostages -= 1
+                self.hostages -= 1  # A hostage is harmed
                 self.messages.append(("system", "The situation has escalated beyond control. A hostage has been harmed."))
                 return False  # Return False to indicate game should end
             elif self.turn >= 10:
@@ -253,42 +328,47 @@ def calculate_game_score(game_state):
     if not game_state.game_over:
         return None
 
-    # 1. Trust Building Score (35% of total)
-    trust_score = (game_state.trust / 10) * 35
-
-    # 2. Tension Management Score (30% of total)
-    initial_tension = game_state.scenario.initial_mood  # Using initial mood as initial tension
+    # Base score components
+    trust_score = (game_state.trust / 10) * 35  # Trust Building (35%)
+    
+    initial_tension = game_state.scenario.initial_mood
     tension_reduction = ((initial_tension - game_state.tension) / initial_tension) * 30
-    tension_score = max(0, tension_reduction)
-
-    # 3. Tactical Effectiveness Score (20% of total)
-    tactical_score = 20  # Start with full points
-    poor_choices = getattr(game_state, 'poor_choices', 0)
-    similar_inputs = getattr(game_state, 'similar_inputs_count', 0)
-
-    # Deduct points for poor tactical choices
-    tactical_score = max(0, tactical_score - (poor_choices * 4))  # -4 points per poor choice
-    tactical_score = max(0, tactical_score - (similar_inputs * 2))  # -2 points for repetitive inputs
-
-    # 4. Negotiation Efficiency Score (15% of total)
-    if game_state.turn <= 5:  # Perfect efficiency
+    tension_score = max(0, tension_reduction)  # Tension Management (30%)
+    
+    # Tactical Effectiveness (20%)
+    tactical_score = 20
+    tactical_score = max(0, tactical_score - (game_state.poor_choices * 4))
+    tactical_score = max(0, tactical_score - (game_state.similar_inputs_count * 2))
+    
+    # Negotiation Efficiency (15%)
+    if game_state.turn <= 5:
         efficiency_score = 15
-    elif game_state.turn <= 7:  # Good efficiency
+    elif game_state.turn <= 7:
         efficiency_score = 12
-    elif game_state.turn <= 9:  # Acceptable efficiency
+    elif game_state.turn <= 9:
         efficiency_score = 8
-    else:  # Maximum turns used
+    else:
         efficiency_score = 5
 
     # Calculate total score and scale to 1-10
     total_score = trust_score + tension_score + tactical_score + efficiency_score
-    final_score = max(1, min(10, total_score / 10))  # Scale and clamp between 1-10
+    final_score = max(1, min(10, total_score / 10))
 
     return round(final_score, 2)  # Return with 2 decimal places
 
 def process_turn(game_state, choice):
     """Process a turn based on player's choice"""
     logging.debug(f"Processing turn with choice: {choice}")
+    
+    # Check turn limit
+    if game_state.turn >= 10:
+        game_state.game_over = True
+        if game_state.tension <= 2 and game_state.trust >= 7:
+            game_state.success = True
+            return False, "Negotiation successful!"
+        else:
+            game_state.success = False
+            return False, "Time has run out. Negotiation failed."
 
     # Process the turn
     game_state.messages.append(("player", choice))
@@ -333,11 +413,14 @@ def release_hostages(self, surrender=False):
     logging.debug(f"Releasing hostages, surrender={surrender}")
     if surrender:
         self.hostages_released = self.hostages
+        self.hostages = 0  # All hostages are released
         self.game_over = True
         self.success = True
         self.messages.append(("system", "The suspect has surrendered and released all hostages. Negotiation successful!"))
+        return True
     else:
         self.messages.append(("system", "The suspect isn't ready to release hostages yet. Keep building trust."))
+        return False
 
 def requires_login(self):
     """Login is now optional"""

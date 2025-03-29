@@ -1,69 +1,352 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <h1>Hostage Negotiation</h1>
+<div class="game-container">
+    <h1 class="game-title">Hostage Negotiation</h1>
     
     <div class="game-status">
-        <p>Tension: {{ game_state.tension }} | Trust: {{ game_state.trust }} | Hostages: {{ game_state.hostages }}</p>
+        <div class="status-item">
+            <span class="status-label">Tension:</span>
+            <span class="status-value">{{ game_state.tension }}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Trust:</span>
+            <span class="status-value">{{ game_state.trust }}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Hostages:</span>
+            <span class="status-value">{{ hostages_remaining }} ({{ hostages_released }} released)</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Turn:</span>
+            <span class="status-value">{{ game_state.turn }}/10</span>
+        </div>
     </div>
 
+    {% if game_state.game_over %}
+        <div class="game-over-section">
+            {% if not user.is_authenticated %}
+                <div class="signup-prompt">
+                    <h3>Game Over - Want to see your stats?</h3>
+                    <p>Create an account to:</p>
+                    <ul>
+                        <li>View your negotiation statistics</li>
+                        <li>Track your progress</li>
+                        <li>Access more scenarios</li>
+                    </ul>
+                    <div class="signup-buttons">
+                        <a href="{% url 'register' %}" class="btn btn-primary">Sign Up Now</a>
+                        <a href="{% url 'login' %}" class="btn btn-secondary">Login</a>
+                    </div>
+                </div>
+            {% else %}
+                <div class="stats-redirect">
+                    <p>Game Over!</p>
+                    <a href="{% url 'stats' %}" class="btn btn-primary">View Your Stats</a>
+                </div>
+            {% endif %}
+        </div>
+   
+    {% endif %}
+    
     <div class="message-history">
-        <h3>Messages:</h3>
-        <ul>
-            {% for sender, msg in game_state.messages %}
-                <li class="message {% if sender == 'suspect' %}suspect{% else %}negotiator{% endif %}">
-                    <strong>{{ sender }}:</strong> {{ msg }}
-                </li>
+        <h3>Conversation History</h3>
+        <div class="message-container">
+            {% for message in game_state.messages %}
+                <div class="message {{ message.0 }}">
+                    <span class="message-sender">
+                        {% if message.0 == 'system' %}System
+                        {% elif message.0 == 'suspect' %}Suspect
+                        {% elif message.0 == 'player' %}You
+                        {% endif %}
+                    </span>
+                    <span class="message-content">{{ message.1 }}</span>
+                </div>
             {% endfor %}
-        </ul>
+        </div>
     </div>
 
     {% if not game_state.game_over %}
-        <div class="response-form">
-            <form method="post" action="{% url 'play' %}">
+        <div class="response-section">
+            <div class="response-header">
+                <div class="response-title">
+                    <span class="response-icon">💬</span>
+                    <h3>Your Response</h3>
+                </div>
+                <div class="response-subtitle">Choose your next message carefully...</div>
+            </div>
+            <form method="post" action="{% url 'play' %}" class="response-form">
                 {% csrf_token %}
-                {{ form.as_p }}
-                <button type="submit" class="btn btn-primary">Send Response</button>
+                <div class="form-group">
+                    {{ form.choice }}
+                </div>
+                <button type="submit" class="send-button">
+                    <span>Send Message</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
             </form>
         </div>
-    {% endif %}
 
-    <style>
-        .game-status {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
+        <style>
+            .response-section {
+                background: var(--secondary);
+                border-radius: 15px;
+                padding: 1.5rem;
+                margin-top: 2rem;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+
+            .response-header {
+                margin-bottom: 1.5rem;
+                padding-bottom: 1rem;
+                border-bottom: 2px solid rgba(var(--primary-rgb), 0.1);
+            }
+
+            .response-title {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 0.5rem;
+            }
+
+            .response-icon {
+                font-size: 1.5rem;
+                line-height: 1;
+            }
+
+            .response-title h3 {
+                color: var(--text);
+                font-size: 1.4rem;
+                font-weight: 600;
+                margin: 0;
+            }
+
+            .response-subtitle {
+                color: var(--text-muted);
+                font-size: 0.9rem;
+                margin-left: 2.25rem;
+            }
+
+            .response-form {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .form-group {
+                width: 100%;
+            }
+
+            .form-group textarea {
+                width: 100%;
+                min-height: 120px;
+                padding: 1rem;
+                border: 2px solid rgba(var(--primary-rgb), 0.2);
+                border-radius: 12px;
+                background: var(--background);
+                color: var(--text);
+                font-size: 1rem;
+                resize: vertical;
+                transition: all 0.2s ease;
+            }
+
+            .form-group textarea:focus {
+                outline: none;
+                border-color: rgb(var(--primary-rgb));
+                box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.1);
+            }
+
+            .send-button {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.5rem;
+                background: rgb(var(--primary-rgb));
+                color: white;
+                padding: 0.8rem 1.5rem;
+                border: none;
+                border-radius: 25px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                align-self: flex-end;
+            }
+
+            .send-button:hover {
+                background: var(--accent);
+                transform: translateY(-2px);
+            }
+
+            .send-button svg {
+                transition: transform 0.2s ease;
+            }
+
+            .send-button:hover svg {
+                transform: translateX(3px) translateY(-3px);
+            }
+
+            @media (max-width: 768px) {
+                .response-section {
+                    padding: 1rem;
+                }
+
+                .response-title h3 {
+                    font-size: 1.2rem;
+                }
+
+                .response-subtitle {
+                    margin-left: 2rem;
+                }
+
+                .send-button {
+                    width: 100%;
+                }
+            }
+        </style>
+    {% endif %}
+</div>
+
+<style>
+    .response-section {
+        background: var(--secondary);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-top: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border: 3px solid var(--primary);
+    }
+
+    .response-section h3 {
+        color: var(--text);
+        font-size: 1.2rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+
+    .response-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 0;  /* Remove any padding */
+    }
+
+    .form-group {
+        width: 100%;
+        margin: 0;   /* Remove any margin */
+    }
+
+    .form-group textarea {
+        width: 100%;
+        min-height: 100px;
+        padding: 1rem;
+        border: 3px solid var(--primary);
+        border-radius: 8px;
+        background: var(--background);
+        color: var(--text);
+        font-size: 1rem;
+        resize: vertical;
+        transition: all 0.2s ease;
+        display: block;  /* Ensure block display */
+        box-sizing: border-box;  /* Include padding and border in element's total width and height */
+        margin: 0;  /* Remove any margin */
+    }
+
+    .form-group textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px rgba(var(--primary), 0.1);
+    }
+
+    .send-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        background: var(--primary);
+        color: white;
+        padding: 0.8rem 1.5rem;
+        border: none;
+        border-radius: 25px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        align-self: flex-end;
+    }
+
+    .send-button:hover {
+        background: var(--accent);
+        transform: translateY(-2px);
+    }
+
+    .send-button svg {
+        transition: transform 0.2s ease;
+    }
+
+    .send-button:hover svg {
+        transform: translateX(3px) translateY(-3px);
+    }
+
+    @media (max-width: 768px) {
+        .response-section {
+            padding: 1rem;
         }
-        
-        .message-history {
-            margin: 20px 0;
+
+        .send-button {
+            width: 100%;
         }
-        
-        .message-history ul {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .message {
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 4px;
-        }
-        
-        .message.suspect {
-            background-color: #f8d7da;
-        }
-        
-        .message.negotiator {
-            background-color: #d4edda;
-        }
-        
-        .response-form {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-        }
-    </style>
+    }
+</style>
+<style>
+    .game-over-section {
+        margin: 20px auto;
+        max-width: 600px;
+        text-align: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+    }
+
+    .stats-redirect {
+        padding: 20px;
+        text-align: center;
+    }
+
+    .stats-redirect .btn-primary {
+        display: inline-block;
+        margin-top: 15px;
+        padding: 10px 25px;
+        background: var(--accent);
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background 0.3s ease;
+    }
+
+    .stats-redirect .btn-primary:hover {
+        background: var(--accent-dark);
+    }
+
+    .signup-prompt {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .signup-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    .signup-buttons .btn {
+        padding: 10px 20px;
+        border-radius: 4px;
+        text-decoration: none;
+    }
+</style>
 {% endblock %}

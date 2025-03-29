@@ -59,25 +59,49 @@ class Scenario(models.Model):
         return self.name
 
 class ScenarioAttempt(models.Model):
+    EMOTIONAL_STATES = [
+        ('volatile', 'Volatile (Mood 7+)'),
+        ('agitated', 'Agitated (Mood 4-6)'),
+        ('strategic', 'Strategic (Mood 2-3)'),
+        ('resigned', 'Resigned (Mood 0-1)')
+    ]
+
+    # Existing fields
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE)
     scenario_name = models.CharField(max_length=255)
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
+    
+    # Updated tracking fields
     initial_tension = models.IntegerField()
-    initial_trust = models.IntegerField()
-    initial_hostages = models.IntegerField()
-    final_tension = models.IntegerField(null=True)
-    final_trust = models.IntegerField(null=True)
-    final_hostages = models.IntegerField(null=True)
-    final_score = models.IntegerField(null=True)
-    success = models.BooleanField(null=True)
-    total_turns = models.IntegerField(default=0)  # Added this field
     current_tension = models.IntegerField()
+    final_tension = models.IntegerField(null=True)
+    
+    initial_trust = models.IntegerField()
     current_trust = models.IntegerField()
+    final_trust = models.IntegerField(null=True)
+    
+    initial_hostages = models.IntegerField()
     current_hostages = models.IntegerField()
+    final_hostages = models.IntegerField(null=True)
+    
+    # New psychological tracking
+    emotional_state = models.CharField(max_length=20, choices=EMOTIONAL_STATES, default='agitated')
+    mirroring_count = models.IntegerField(default=0)
+    emotional_labeling_success = models.IntegerField(default=0)
+    emotional_labeling_failure = models.IntegerField(default=0)
+    tactical_empathy_success = models.IntegerField(default=0)
+    tactical_empathy_failure = models.IntegerField(default=0)
+    
+    # Game progress
     current_turn = models.IntegerField(default=1)
+    total_turns = models.IntegerField(default=0)
     game_over = models.BooleanField(default=False)
+    success = models.BooleanField(null=True)
+    final_score = models.IntegerField(null=True)
+    
+    # Negotiation tracking
     messages = models.JSONField(default=list)
     good_choice_streak = models.IntegerField(default=0)
     promises_kept = models.JSONField(default=list)
@@ -88,6 +112,16 @@ class ScenarioAttempt(models.Model):
     similar_inputs_count = models.IntegerField(default=0)
     last_input_type = models.CharField(max_length=50, null=True)
     emotional_appeals_count = models.IntegerField(default=0)
+
+    def update_emotional_state(self):
+        if self.current_tension >= 7:
+            self.emotional_state = 'volatile'
+        elif 4 <= self.current_tension <= 6:
+            self.emotional_state = 'agitated'
+        elif 2 <= self.current_tension <= 3:
+            self.emotional_state = 'strategic'
+        else:
+            self.emotional_state = 'resigned'
 
     def get_game_state(self):
         """Convert attempt data to GameState object"""
@@ -115,24 +149,25 @@ class ScenarioAttempt(models.Model):
         return game_state
 
     def update_from_game_state(self, game_state):
-        """Update attempt data from GameState object"""
+        """Update attempt with current game state"""
         self.current_tension = game_state.tension
         self.current_trust = game_state.trust
         self.current_hostages = game_state.hostages
-        self.current_turn = game_state.turn
-        self.total_turns = game_state.turn  # Update total_turns when updating from game state
+        self.messages = game_state.messages
+        self.hostages_released = game_state.hostages_released
+        self.current_turn = game_state.turn  # Make sure this line exists
+        self.total_turns = game_state.turn
         self.game_over = game_state.game_over
         self.success = game_state.success
-        self.messages = game_state.messages
         self.good_choice_streak = game_state.good_choice_streak
         self.promises_kept = game_state.promises_kept
         self.rapport = game_state.rapport
-        self.hostages_released = game_state.hostages_released
-        self.surrender_offered = game_state.surrender_offered
         self.poor_choices = game_state.poor_choices
         self.similar_inputs_count = game_state.similar_inputs_count
         self.last_input_type = game_state.last_input_type
         self.emotional_appeals_count = game_state.emotional_appeals_count
+        
+        self.update_emotional_state()
         
         if game_state.game_over:
             self.end_time = datetime.utcnow()
@@ -141,6 +176,9 @@ class ScenarioAttempt(models.Model):
             self.final_hostages = game_state.hostages
         
         self.save()
+
+    def __str__(self):
+        return f"Attempt #{self.id} - {self.scenario_name} by {self.user.username if self.user else 'Guest'}"
 
 class Score(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='scores')
@@ -190,6 +228,9 @@ class Score(models.Model):
                 created_at=score.created_at
             )
 
+    def __str__(self):
+        return f"Score: {self.score} - {self.scenario_name} by {self.user.username if self.user else 'Guest'}"
+
 class GameTurn(models.Model):
     attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='turns')
     turn_number = models.IntegerField()
@@ -206,6 +247,9 @@ class GameTurn(models.Model):
         ]
         ordering = ['turn_number']
 
+    def __str__(self):
+        return f"Turn {self.turn_number} of Attempt #{self.attempt_id}"
+
 class PlayerPromise(models.Model):
     attempt = models.ForeignKey(ScenarioAttempt, on_delete=models.CASCADE, related_name='promises')
     promise_text = models.TextField()
@@ -217,6 +261,10 @@ class PlayerPromise(models.Model):
         indexes = [
             models.Index(fields=['attempt']),
         ]
+
+    def __str__(self):
+        status = "Kept" if self.was_kept else "Pending" if self.turn_resolved is None else "Broken"
+        return f"Promise: {self.promise_text[:30]}... ({status})"
 
 class GameProgress(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='progress')
